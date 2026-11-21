@@ -7,6 +7,8 @@ import models
 import security
 import schemas
 from database import engine, get_db
+from pydantic import BaseModel
+
 
 # Sincroniza y crea las tablas en MySQL si no existen
 models.Base.metadata.create_all(bind=engine)
@@ -384,3 +386,53 @@ def obtener_resumen_dashboard(db: Session = Depends(get_db)):
             estado: cantidad for estado, cantidad in expedientes_por_estado
         }
     }
+
+class LoginAdminRequest(BaseModel):
+    dni: str
+    password: str
+
+@app.post("/api/v1/admin/login")
+def login_admin(datos: LoginAdminRequest, db: Session = Depends(get_db)):
+    # Buscamos al usuario por DNI y que esté activo
+    usuario = db.query(models.Usuario).filter(
+        models.Usuario.dni == datos.dni,
+        models.Usuario.estado == True
+    ).first()
+
+    # Roles permitidos: 1 (Administrador/Coordinador), 2 (Secretario), 3 (Tesorero)
+    if not usuario or usuario.id_rol not in [1, 2, 3]:
+        raise HTTPException(status_code=403, detail="Acceso denegado: solo personal administrativo.")
+
+    # Verificación de contraseña (acepta texto plano de prueba y contraseñas encriptadas)
+    es_valida = False
+    if usuario.password_hash == datos.password:
+        es_valida = True
+    else:
+        try:
+            es_valida = security.verificar_password(datos.password, usuario.password_hash)
+        except Exception:
+            es_valida = False
+
+    if not es_valida:
+        raise HTTPException(status_code=401, detail="Contraseña incorrecta.")
+
+    roles_nombre = {1: "Coordinador/Admin", 2: "Secretario", 3: "Tesorero"}
+    return {
+        "mensaje": "Acceso concedido",
+        "usuario": usuario.nombres,
+        "rol": roles_nombre.get(usuario.id_rol, "Administrativo")
+    }
+
+@app.get("/api/v1/catequizandos")
+def listar_catequizandos(db: Session = Depends(get_db)):
+    jovenes = db.query(models.Catequizando).all()
+    return [
+        {
+            "ID": j.id_cateq,
+            "DNI": j.dni,
+            "Nombres": j.nombres,
+            "Apellidos": j.apellidos,
+            "QR Token": j.qr_token
+        }
+        for j in jovenes
+    ]

@@ -156,3 +156,52 @@ elif menu == "📁 Secretaría":
                     st.info("Este alumno aún no tiene documentos registrados.")
             else:
                 st.error(r.json().get("detail", "No encontrado"))
+
+st.divider()
+st.subheader("👥 Directorio de Catequizandos (Acceso Restringido)")
+
+# Estado de sesión para recordar si ya inició sesión
+if "admin_logueado" not in st.session_state:
+    st.session_state["admin_logueado"] = False
+    st.session_state["admin_info"] = ""
+
+if not st.session_state["admin_logueado"]:
+    with st.form("login_admin_form"):
+        st.info("Inicia sesión con credenciales de Coordinador, Secretario o Tesorero.")
+        dni_input = st.text_input("DNI de Usuario")
+        pass_input = st.text_input("Contraseña", type="password")
+        btn_ingresar = st.form_submit_button("Ingresar")
+
+        if btn_ingresar:
+            resp = requests.post(
+                f"{API_URL}/api/v1/admin/login",
+                json={"dni": dni_input, "password": pass_input}
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                st.session_state["admin_logueado"] = True
+                st.session_state["admin_info"] = f"{data['usuario']} ({data['rol']})"
+                st.rerun()
+            else:
+                st.error(resp.json().get("detail", "Credenciales inválidas."))
+else:
+    col1, col2 = st.columns([4, 1])
+    col1.success(f"Sesión activa: **{st.session_state['admin_info']}**")
+    if col2.button("Cerrar sesión"):
+        st.session_state["admin_logueado"] = False
+        st.rerun()
+
+    # Cargar y mostrar la tabla de jóvenes
+    resp_jovenes = requests.get(f"{API_URL}/api/v1/catequizandos")
+    if resp_jovenes.status_code == 200:
+        lista = resp_jovenes.json()
+        if lista:
+            df = pd.DataFrame(lista)
+            busqueda = st.text_input("🔍 Buscar por DNI, nombre o apellido:")
+            if busqueda:
+                df = df[df.apply(lambda row: busqueda.lower() in row.astype(str).str.lower().to_string(), axis=1)]
+            st.dataframe(df, use_container_width=True, hide_index=True)
+        else:
+            st.warning("Aún no hay catequizandos registrados en la base de datos.")
+    else:
+        st.error("No se pudo cargar la lista de catequizandos.")
