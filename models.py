@@ -1,0 +1,91 @@
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, BigInteger, Numeric, Enum, TIMESTAMP, func
+from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
+from database import Base
+
+
+class Rol(Base):
+    __tablename__ = "roles"
+
+    id_rol = Column(Integer, primary_key=True, autoincrement=True)
+    nombre_rol = Column(String(50), unique=True, nullable=False)
+    nivel_acceso = Column(Integer, nullable=False)
+
+    # Relación bidireccional con la tabla usuarios
+    usuarios = relationship("Usuario", back_populates="rol")
+
+
+class Usuario(Base):
+    __tablename__ = "usuarios"
+
+    id_usuario = Column(Integer, primary_key=True, autoincrement=True)
+    id_rol = Column(Integer, ForeignKey("roles.id_rol", ondelete="RESTRICT"), nullable=False)
+    dni = Column(String(8), unique=True, nullable=False)
+    nombres = Column(String(150), nullable=False)
+    password_hash = Column(String(255), nullable=False)
+    estado = Column(Boolean, default=True)
+
+    # Relación bidireccional con la tabla roles
+    rol = relationship("Rol", back_populates="usuarios")
+
+class Catequizando(Base):
+    __tablename__ = "catequizandos"
+
+    id_cateq = Column(Integer, primary_key=True, autoincrement=True)
+    dni = Column(String(8), unique=True, nullable=False)
+    nombres = Column(String(100), nullable=False)
+    apellidos = Column(String(100), nullable=False)
+    qr_token = Column(String(64), unique=True, index=True)
+
+
+class Asistencia(Base):
+    __tablename__ = "asistencias"
+
+    # Cambiamos id_asistencia por id_asis para que coincida con tu SQL
+    id_asis = Column(Integer, primary_key=True, autoincrement=True)
+
+    id_cateq = Column(Integer, ForeignKey("catequizandos.id_cateq", ondelete="CASCADE"), nullable=False)
+    id_usuario = Column(Integer, ForeignKey("usuarios.id_usuario", ondelete="RESTRICT"), nullable=False)
+
+    fecha_hora = Column(DateTime(timezone=True), server_default=func.now())
+    estado = Column(String(20), default="Presente")
+
+    # Relación para facilitar consultas
+    catequizando = relationship("Catequizando")
+
+class ConceptoPago(Base):
+    __tablename__ = "conceptos_pago"
+
+    id_concepto = Column(Integer, primary_key=True, autoincrement=True)
+    nombre_conc = Column(String(100), unique=True, nullable=False)
+    monto_base = Column(Numeric(10, 2), nullable=False)
+
+
+class Pago(Base):
+    __tablename__ = "pagos"
+
+    id_pago = Column(BigInteger, primary_key=True, autoincrement=True)
+    id_cateq = Column(Integer, ForeignKey("catequizandos.id_cateq", ondelete="RESTRICT"), nullable=False)
+    id_usuario = Column(Integer, ForeignKey("usuarios.id_usuario", ondelete="RESTRICT"), nullable=False)
+    id_concepto = Column(Integer, ForeignKey("conceptos_pago.id_concepto", ondelete="RESTRICT"), nullable=False)
+    monto = Column(Numeric(10, 2), nullable=False)
+    metodo_pago = Column(Enum("Efectivo", "Yape", "Transferencia"), nullable=False)
+    fecha_hora = Column(TIMESTAMP, server_default=func.now())
+
+class DocumentoRequisito(Base):
+    __tablename__ = "documentos_requisito"
+
+    id_doc = Column(Integer, primary_key=True, autoincrement=True)
+    nombre_doc = Column(String(100), unique=True, nullable=False)
+    es_obligatorio = Column(Boolean, default=True)
+
+
+class Expediente(Base):
+    __tablename__ = "expedientes"
+
+    id_exp = Column(BigInteger, primary_key=True, autoincrement=True)
+    id_cateq = Column(Integer, ForeignKey("catequizandos.id_cateq", ondelete="CASCADE"), nullable=False)
+    id_doc = Column(Integer, ForeignKey("documentos_requisito.id_doc", ondelete="RESTRICT"), nullable=False)
+    id_usuario = Column(Integer, ForeignKey("usuarios.id_usuario", ondelete="RESTRICT"), nullable=False)
+    estado = Column(Enum("Entregado", "Pendiente", "Observado"), nullable=False)
+    fecha_rec = Column(TIMESTAMP, nullable=True, default=None)

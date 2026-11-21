@@ -1,0 +1,7 @@
+timeStamp,elapsed,label,responseCode,responseMessage,threadName,success,bytes,sentBytes,latency,idleTime,connect
+1710000000001,45,POST /login,200,OK,Thread Group 1-1,true,180,120,40,0,15
+1710000000010,52,POST /login,200,OK,Thread Group 1-2,true,180,120,48,0,12
+1710000000020,3050,POST /registro,500,Internal Server Error,Thread Group 1-3,false,21,150,3000,0,25
+1710000000030,60,POST /login,200,OK,Thread Group 1-4,true,180,120,55,0,10
+1710000000040,3100,POST /registro,500,Internal Server Error,Thread Group 1-5,false,21,150,3000,0,30
+1710000000050,48,POST /login,200,OK,Thread Group 1-6,true,180,120,42,0,11
