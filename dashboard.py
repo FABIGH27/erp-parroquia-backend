@@ -1,6 +1,8 @@
 import streamlit as st
 import requests
 import pandas as pd
+import qrcode
+from io import BytesIO
 
 st.set_page_config(page_title="ERP Parroquia - Confirmación", layout="wide")
 
@@ -98,6 +100,35 @@ elif pagina == "👥 Directorio de Catequizandos":
     if not st.session_state["admin_logueado"]:
         mostrar_login_admin()
     else:
+        # --- FORMULARIO PARA REGISTRAR NUEVO CATEQUIZANDO ---
+        with st.expander("➕ Registrar Nuevo Catequizando"):
+            with st.form("form_nuevo_catequizando", clear_on_submit=True):
+                c1, c2, c3 = st.columns(3)
+                dni_nuevo = c1.text_input("DNI (8 dígitos)", max_chars=8)
+                nombres_nuevo = c2.text_input("Nombres")
+                apellidos_nuevo = c3.text_input("Apellidos")
+                btn_guardar = st.form_submit_button("Guardar y Generar QR")
+
+                if btn_guardar:
+                    if not dni_nuevo or not nombres_nuevo or not apellidos_nuevo:
+                        st.warning("Completa todos los campos.")
+                    else:
+                        resp_crear = requests.post(
+                            f"{API_URL}/api/v1/catequizandos",
+                            json={
+                                "dni": dni_nuevo,
+                                "nombres": nombres_nuevo,
+                                "apellidos": apellidos_nuevo
+                            },
+                            timeout=15
+                        )
+                        if resp_crear.status_code == 200:
+                            st.success(f"Registrado correctamente. Token QR: {resp_crear.json()['qr_token']}")
+                            st.rerun()
+                        else:
+                            st.error(resp_crear.json().get("detail", "No se pudo registrar."))
+
+        # --- TABLA DEL DIRECTORIO ---
         resp_jovenes = requests.get(f"{API_URL}/api/v1/catequizandos", timeout=15)
         if resp_jovenes.status_code == 200:
             lista = resp_jovenes.json()
@@ -107,6 +138,31 @@ elif pagina == "👥 Directorio de Catequizandos":
                 if busqueda:
                     df = df[df.apply(lambda row: busqueda.lower() in row.astype(str).str.lower().to_string(), axis=1)]
                 st.dataframe(df, use_container_width=True, hide_index=True)
+
+                # --- GENERADOR Y DESCARGA DE QR ---
+                st.divider()
+                st.subheader("🎫 Generar y Descargar Código QR")
+                opciones = {f"{j['Nombres']} {j['Apellidos']} (DNI: {j['DNI']})": j for j in lista}
+                seleccion = st.selectbox("Selecciona un catequizando:", list(opciones.keys()))
+                alumno_sel = opciones[seleccion]
+
+                img_qr = qrcode.make(alumno_sel["QR Token"])
+                buffer = BytesIO()
+                img_qr.save(buffer, format="PNG")
+                bytes_qr = buffer.getvalue()
+
+                col_img, col_btn = st.columns([1, 2])
+                with col_img:
+                    st.image(bytes_qr, caption=alumno_sel["QR Token"], width=220)
+                with col_btn:
+                    st.write(f"**Catequizando:** {alumno_sel['Nombres']} {alumno_sel['Apellidos']}")
+                    st.write(f"**DNI:** {alumno_sel['DNI']}")
+                    st.download_button(
+                        label="⬇️ Descargar QR en PNG",
+                        data=bytes_qr,
+                        file_name=f"QR_{alumno_sel['DNI']}_{alumno_sel['Apellidos']}.png",
+                        mime="image/png"
+                    )
             else:
                 st.warning("Aún no hay catequizandos registrados.")
         else:

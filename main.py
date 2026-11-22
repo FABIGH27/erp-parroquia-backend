@@ -428,6 +428,29 @@ def login_admin(datos: LoginAdminRequest, db: Session = Depends(get_db)):
         "rol": roles_nombre.get(usuario.id_rol, "Administrativo")
     }
 
+@app.post("/api/v1/catequizandos", tags=["Gestión de Catequizandos"])
+def crear_catequizando(datos: schemas.CatequizandoCreate, db: Session = Depends(get_db)):
+    existe = db.query(models.Catequizando).filter(models.Catequizando.dni == datos.dni).first()
+    if existe:
+        raise HTTPException(status_code=400, detail="Ya existe un catequizando con ese DNI.")
+
+    qr_generado = f"CAT-{datos.dni.strip()}"
+    nuevo = models.Catequizando(
+        dni=datos.dni.strip(),
+        nombres=datos.nombres.strip(),
+        apellidos=datos.apellidos.strip(),
+        qr_token=qr_generado
+    )
+    db.add(nuevo)
+    db.commit()
+    db.refresh(nuevo)
+
+    return {
+        "mensaje": "Catequizando registrado exitosamente",
+        "id": nuevo.id_cateq,
+        "qr_token": nuevo.qr_token
+    }
+
 @app.get("/api/v1/catequizandos")
 def listar_catequizandos(db: Session = Depends(get_db)):
     jovenes = db.query(models.Catequizando).all()

@@ -28,3 +28,8 @@ class ExpedienteCreate(BaseModel):
     id_doc: int = Field(..., example=1)
     estado: Literal["Entregado", "Pendiente", "Observado"]
     id_usuario: int = Field(default=1, description="ID del secretario que valida el documento")
+
+class CatequizandoCreate(BaseModel):
+    dni: str
+    nombres: str
+    apellidos: str
