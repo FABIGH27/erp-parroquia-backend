@@ -39,3 +39,9 @@ class ClaveTemporalCreate(BaseModel):
 
 class ClaveTemporalValidar(BaseModel):
     codigo: str
+
+class UsuarioCreate(BaseModel):
+    dni: str
+    nombre: str
+    password: str
+    rol: str

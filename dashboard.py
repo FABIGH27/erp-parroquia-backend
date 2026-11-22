@@ -71,9 +71,9 @@ TODOS_LOS_MODULOS = [
 ]
 
 PERMISOS_POR_ROL = {
-    "administrador": TODOS_LOS_MODULOS + ["🔐 Accesos Temporales"],
-    "admin": TODOS_LOS_MODULOS + ["🔐 Accesos Temporales"],
-    "coordinador": TODOS_LOS_MODULOS + ["🔐 Accesos Temporales"],
+    "administrador": TODOS_LOS_MODULOS + ["🔐 Accesos Temporales", "👤 Gestión de Usuarios"],
+    "admin": TODOS_LOS_MODULOS + ["🔐 Accesos Temporales", "👤 Gestión de Usuarios"],
+    "coordinador": TODOS_LOS_MODULOS + ["🔐 Accesos Temporales", "👤 Gestión de Usuarios"],
     "vocal": ["📊 Resumen General", "👥 Directorio de Catequizandos", "📋 Control de Asistencias"],
     "tesorero": ["📊 Resumen General", "💰 Tesorería"],
     "tesorera": ["📊 Resumen General", "💰 Tesorería"],
@@ -483,3 +483,65 @@ elif pagina == "🔐 Accesos Temporales":
                     st.rerun()
     else:
         st.info("No hay claves temporales generadas aún.")
+
+# =========================================================
+# SECCIÓN 7: GESTIÓN DE USUARIOS (SOLO ADMIN)
+# =========================================================
+elif pagina == "👤 Gestión de Usuarios":
+    st.title("👤 Gestión de Usuarios del Sistema")
+    st.caption("Crea y administra las cuentas del equipo parroquial.")
+
+    with st.expander("➕ Crear Nuevo Usuario", expanded=True):
+        with st.form("form_nuevo_usuario", clear_on_submit=True):
+            c1, c2 = st.columns(2)
+            dni_u = c1.text_input("DNI (8 dígitos)", max_chars=8)
+            nombre_u = c2.text_input("Nombre Completo")
+
+            c3, c4 = st.columns(2)
+            pass_u = c3.text_input("Contraseña", type="password")
+            rol_u = c4.selectbox(
+                "Rol asignado",
+                ["Vocal", "Catequista", "Secretario", "Tesorero", "Coordinador", "Administrador"]
+            )
+
+            if st.form_submit_button("Crear Usuario"):
+                if not dni_u or not nombre_u or not pass_u:
+                    st.warning("Completa todos los campos.")
+                else:
+                    r = requests.post(
+                        f"{API_URL}/api/v1/admin/usuarios",
+                        json={
+                            "dni": dni_u,
+                            "nombre": nombre_u,
+                            "password": pass_u,
+                            "rol": rol_u
+                        },
+                        timeout=15
+                    )
+                    if r.status_code in [200, 201]:
+                        st.success(f"Usuario **{nombre_u}** ({rol_u}) creado correctamente.")
+                        st.rerun()
+                    else:
+                        st.error(r.json().get("detail", f"Error ({r.status_code}): {r.text}"))
+
+    st.divider()
+    st.subheader("Usuarios Registrados")
+    resp_u = requests.get(f"{API_URL}/api/v1/admin/usuarios", timeout=15)
+    if resp_u.status_code == 200 and resp_u.json():
+        usuarios = resp_u.json()
+        st.dataframe(pd.DataFrame(usuarios), use_container_width=True, hide_index=True)
+
+        opciones_del = {f"{u['Nombre']} - {u['Rol']} (DNI: {u['DNI']})": u["ID"] for u in usuarios}
+        u_eliminar = st.selectbox("Seleccionar usuario para eliminar:", list(opciones_del.keys()))
+        if st.button("🗑️ Eliminar Usuario Seleccionado"):
+            r_del = requests.delete(
+                f"{API_URL}/api/v1/admin/usuarios/{opciones_del[u_eliminar]}",
+                timeout=15
+            )
+            if r_del.status_code == 200:
+                st.success("Usuario eliminado.")
+                st.rerun()
+            else:
+                st.error(f"No se pudo eliminar: {r_del.text}")
+    else:
+        st.info("No hay usuarios registrados.")

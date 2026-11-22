@@ -580,3 +580,42 @@ def validar_clave_temporal(datos: schemas.ClaveTemporalValidar, db: Session = De
         raise HTTPException(status_code=401, detail="Esta clave temporal ya expiró.")
 
     return {"valida": True, "mensaje": "Acceso total desbloqueado para esta sesión."}
+
+@app.post("/api/v1/admin/usuarios", tags=["Seguridad y Accesos"])
+def crear_usuario(datos: schemas.UsuarioCreate, db: Session = Depends(get_db)):
+    existe = db.query(models.Usuario).filter(models.Usuario.dni == datos.dni.strip()).first()
+    if existe:
+        raise HTTPException(status_code=400, detail="Ya existe un usuario registrado con ese DNI.")
+
+    nuevo_usuario = models.Usuario(
+        dni=datos.dni.strip(),
+        nombre=datos.nombre.strip(),
+        password=datos.password.strip(),
+        rol=datos.rol.strip()
+    )
+    db.add(nuevo_usuario)
+    db.commit()
+    db.refresh(nuevo_usuario)
+    return {"mensaje": "Usuario creado exitosamente", "dni": nuevo_usuario.dni, "rol": nuevo_usuario.rol}
+
+@app.get("/api/v1/admin/usuarios", tags=["Seguridad y Accesos"])
+def listar_usuarios(db: Session = Depends(get_db)):
+    usuarios = db.query(models.Usuario).all()
+    return [
+        {
+            "ID": u.id_usuario,
+            "DNI": u.dni,
+            "Nombre": u.nombre,
+            "Rol": u.rol
+        }
+        for u in usuarios
+    ]
+
+@app.delete("/api/v1/admin/usuarios/{id_usuario}", tags=["Seguridad y Accesos"])
+def eliminar_usuario(id_usuario: int, db: Session = Depends(get_db)):
+    usuario = db.query(models.Usuario).filter(models.Usuario.id_usuario == id_usuario).first()
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+    db.delete(usuario)
+    db.commit()
+    return {"mensaje": "Usuario eliminado correctamente."}
