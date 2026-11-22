@@ -344,7 +344,7 @@ elif pagina == "💰 Tesorería":
         with st.form("form_nuevo_concepto", clear_on_submit=True):
             c1, c2 = st.columns(2)
             nombre_conc = c1.text_input("Nombre del Concepto", placeholder="Ej: Inscripción, Retiro, Ceremonia")
-            monto_conc = c2.number_input("Monto Sugerido (S/)", min_value=0.0, step=1.0)
+            monto_base = c2.number_input("Monto Base (S/)", min_value=1.0, step=1.0)
             btn_crear_conc = st.form_submit_button("Agregar Concepto")
 
             if btn_crear_conc:
@@ -353,7 +353,7 @@ elif pagina == "💰 Tesorería":
                 else:
                     r = requests.post(
                         f"{API_URL}/api/v1/tesoreria/conceptos",
-                        json={"nombre": nombre_conc.strip(), "monto_sugerido": monto_conc},
+                        json={"nombre_conc": nombre_conc.strip(), "monto_base": monto_base},
                         timeout=15
                     )
                     if r.status_code in [200, 201]:
@@ -374,9 +374,9 @@ elif pagina == "💰 Tesorería":
         with st.expander("➕ Registrar Nuevo Pago / Aporte", expanded=True):
             if lista_jovenes and lista_conceptos:
                 with st.form("form_pago", clear_on_submit=True):
-                    opciones_j = {f"{j['Nombres']} {j['Apellidos']} (DNI: {j['DNI']})": j["ID"] for j in lista_jovenes}
+                    opciones_j = {f"{j['Nombres']} {j['Apellidos']} (DNI: {j['DNI']})": j["DNI"] for j in lista_jovenes}
                     opciones_c = {
-                        f"{c.get('nombre', c.get('nombre_concepto', 'Concepto'))} (S/ {c.get('monto_sugerido', c.get('monto', 0))})": c.get("id_concepto", c.get("id"))
+                        f"{c['nombre_conc']} (S/ {c['monto_base']})": c["id_concepto"]
                         for c in lista_conceptos
                     }
 
@@ -386,19 +386,18 @@ elif pagina == "💰 Tesorería":
 
                     c1, c2 = st.columns(2)
                     monto = c1.number_input("Monto Pagado (S/)", min_value=1.0, step=1.0)
-                    metodo = c2.selectbox("Método de Pago", ["Efectivo", "Yape", "Plin", "Transferencia"])
-                    obs_pago = st.text_input("Observación (opcional)", placeholder="Ej: N° de operación Yape, pago en cuotas...")
+                    metodo = c2.selectbox("Método de Pago", ["Efectivo", "Yape", "Transferencia"])
                     btn_pago = st.form_submit_button("Registrar Pago")
 
                     if btn_pago:
                         resp_p = requests.post(
-                            f"{API_URL}/api/v1/pagos",
+                            f"{API_URL}/api/v1/tesoreria/pagos",
                             json={
-                                "id_cateq": opciones_j[alumno_sel],
+                                "dni_catequizando": opciones_j[alumno_sel],
                                 "id_concepto": opciones_c[concepto_sel],
                                 "monto": monto,
                                 "metodo_pago": metodo,
-                                "observaciones": obs_pago.strip() or None
+                                "id_usuario": 1
                             },
                             timeout=15
                         )
@@ -411,14 +410,19 @@ elif pagina == "💰 Tesorería":
                 st.warning("Necesitas tener al menos un catequizando y un concepto de pago en el catálogo.")
 
         st.subheader("Historial de Pagos")
-        resp_pagos = requests.get(f"{API_URL}/api/v1/pagos", timeout=15)
-        if resp_pagos.status_code == 200 and resp_pagos.json():
-            st.dataframe(pd.DataFrame(resp_pagos.json()), use_container_width=True, hide_index=True)
-            df_pagos = pd.DataFrame(resp_pagos.json())
-            st.dataframe(df_pagos, use_container_width=True, hide_index=True)
-            mostrar_botones_exportacion(df_pagos, "reporte_pagos", "Reporte de Tesoreria - Pagos")
+        resp_pagos = requests.get(f"{API_URL}/api/v1/tesoreria/pagos", timeout=15)
+        if resp_pagos.status_code == 200:
+            data_pagos = resp_pagos.json()
+            lista_pagos = data_pagos.get("pagos", [])
+            if lista_pagos:
+                st.metric("Total Recaudado", f"S/ {data_pagos.get('total_recaudado', 0):.2f}")
+                df_pagos = pd.DataFrame(lista_pagos)
+                st.dataframe(df_pagos, use_container_width=True, hide_index=True)
+                mostrar_botones_exportacion(df_pagos, "reporte_pagos", "Reporte de Tesoreria - Pagos")
+            else:
+                st.info("Aún no hay pagos registrados.")
         else:
-            st.info("Aún no hay pagos registrados.")
+            st.error("No se pudo cargar el historial de pagos.")
 
 # =========================================================
 # SECCIÓN 5: SECRETARÍA
@@ -445,7 +449,7 @@ elif pagina == "📁 Secretaría":
                 else:
                     r = requests.post(
                         f"{API_URL}/api/v1/secretaria/documentos",
-                        json={"nombre": nombre_doc.strip(), "obligatorio": es_obligatorio},
+                        json={"nombre_doc": nombre_doc.strip(), "es_obligatorio": es_obligatorio},
                         timeout=15
                     )
                     if r.status_code in [200, 201]:
@@ -466,27 +470,23 @@ elif pagina == "📁 Secretaría":
         with st.expander("📝 Registrar / Actualizar Documento de Catequizando", expanded=True):
             if lista_jovenes and lista_docs:
                 with st.form("form_expediente", clear_on_submit=True):
-                    opciones_j = {f"{j['Nombres']} {j['Apellidos']} (DNI: {j['DNI']})": j["ID"] for j in lista_jovenes}
-                    opciones_d = {
-                        d.get("nombre", d.get("nombre_documento", "Documento")): d.get("id_doc", d.get("id"))
-                        for d in lista_docs
-                    }
+                    opciones_j = {f"{j['Nombres']} {j['Apellidos']} (DNI: {j['DNI']})": j["DNI"] for j in lista_jovenes}
+                    opciones_d = {d["nombre_doc"]: d["id_doc"] for d in lista_docs}
 
                     c1, c2, c3 = st.columns(3)
                     alumno_sel = c1.selectbox("Catequizando", list(opciones_j.keys()))
                     doc_sel = c2.selectbox("Documento Requisito", list(opciones_d.keys()))
                     estado_exp = c3.selectbox("Estado", ["Entregado", "Pendiente", "Observado"])
-                    obs_exp = st.text_input("Observación (opcional)", placeholder="Ej: Trajo copia simple, falta original firmada...")
                     btn_exp = st.form_submit_button("Guardar Estado")
 
                     if btn_exp:
                         resp_e = requests.post(
-                            f"{API_URL}/api/v1/expedientes",
+                            f"{API_URL}/api/v1/secretaria/expedientes",
                             json={
-                                "id_cateq": opciones_j[alumno_sel],
+                                "dni_catequizando": opciones_j[alumno_sel],
                                 "id_doc": opciones_d[doc_sel],
                                 "estado": estado_exp,
-                                "observaciones": obs_exp.strip() or None
+                                "id_usuario": 1
                             },
                             timeout=15
                         )
@@ -498,15 +498,23 @@ elif pagina == "📁 Secretaría":
             else:
                 st.warning("Necesitas tener al menos un catequizando y un documento en el catálogo.")
 
-        st.subheader("Listado de Expedientes")
-        resp_exp = requests.get(f"{API_URL}/api/v1/expedientes", timeout=15)
-        if resp_exp.status_code == 200 and resp_exp.json():
-            st.dataframe(pd.DataFrame(resp_exp.json()), use_container_width=True, hide_index=True)
-            df_exp = pd.DataFrame(resp_exp.json())
-            st.dataframe(df_exp, use_container_width=True, hide_index=True)
-            mostrar_botones_exportacion(df_exp, "reporte_expedientes", "Reporte de Secretaria - Expedientes")
-        else:
-            st.info("Aún no hay expedientes registrados.")
+        st.subheader("Consultar Expediente por Catequizando")
+        if lista_jovenes:
+            opciones_consulta = {f"{j['Nombres']} {j['Apellidos']} (DNI: {j['DNI']})": j["DNI"] for j in lista_jovenes}
+            alumno_consulta = st.selectbox("Selecciona un catequizando para ver sus documentos:", list(opciones_consulta.keys()))
+            dni_consulta = opciones_consulta[alumno_consulta]
+
+            resp_exp = requests.get(f"{API_URL}/api/v1/secretaria/expedientes/{dni_consulta}", timeout=15)
+            if resp_exp.status_code == 200:
+                docs_alumno = resp_exp.json().get("documentos", [])
+                if docs_alumno:
+                    df_exp = pd.DataFrame(docs_alumno)
+                    st.dataframe(df_exp, use_container_width=True, hide_index=True)
+                    mostrar_botones_exportacion(df_exp, f"expediente_{dni_consulta}", f"Expediente - {alumno_consulta}")
+                else:
+                    st.info("Este catequizando aún no tiene documentos registrados.")
+            else:
+                st.error("No se pudo consultar el expediente.")
 
 # =========================================================
 # SECCIÓN 6: ACCESOS TEMPORALES (SOLO ADMIN)
