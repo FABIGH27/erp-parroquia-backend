@@ -11,7 +11,7 @@ st.set_page_config(page_title="ERP Parroquia - Confirmación", layout="wide")
 API_URL = "https://erp-parroquia-api.onrender.com"
 
 # =========================================================
-# FUNCIONES DE EXPORTACIÓN (EXCEL Y PDF)
+# FUNCIONES DE EXPORTACIÓN (EXCEL Y PDF) Y BUSCADOR
 # =========================================================
 def generar_excel(df: pd.DataFrame) -> bytes:
     output = BytesIO()
@@ -75,6 +75,28 @@ def mostrar_botones_exportacion(df: pd.DataFrame, nombre_base: str, titulo_pdf: 
             mime="application/pdf",
             key=f"pdf_{nombre_base}"
         )
+
+def selector_con_buscador(etiqueta: str, opciones_dict: dict, key_prefix: str, placeholder: str = "Buscar por DNI, nombre o ID..."):
+    filtro = st.text_input(
+        f"🔍 Filtrar {etiqueta.lower()}",
+        placeholder=placeholder,
+        key=f"busq_{key_prefix}"
+    )
+    if filtro:
+        filtradas = {k: v for k, v in opciones_dict.items() if filtro.lower() in k.lower()}
+    else:
+        filtradas = opciones_dict
+
+    if not filtradas:
+        st.warning("No se encontraron coincidencias.")
+        return None
+
+    seleccion = st.selectbox(
+        f"{etiqueta} ({len(filtradas)} encontrados):",
+        list(filtradas.keys()),
+        key=f"sel_{key_prefix}"
+    )
+    return filtradas[seleccion]
 
 # Estado de sesión global
 if "admin_logueado" not in st.session_state:
@@ -270,62 +292,58 @@ elif pagina == "👥 Directorio de Catequizandos":
 
             st.divider()
             st.subheader("🎫 Generar y Descargar Código QR")
-            opciones = {f"{j['Nombres']} {j['Apellidos']} (DNI: {j['DNI']})": j for j in lista}
-            seleccion = st.selectbox("Selecciona un catequizando:", list(opciones.keys()))
-            alumno_sel = opciones[seleccion]
+            opciones_qr = {f"{j['Nombres']} {j['Apellidos']} (DNI: {j['DNI']})": j for j in lista}
+            alumno_sel = selector_con_buscador("Catequizando para QR", opciones_qr, "qr_cat")
 
-            img_qr = qrcode.make(alumno_sel["QR Token"])
-            buffer = BytesIO()
-            img_qr.save(buffer, format="PNG")
-            bytes_qr = buffer.getvalue()
+            if alumno_sel:
+                img_qr = qrcode.make(alumno_sel["QR Token"])
+                buffer = BytesIO()
+                img_qr.save(buffer, format="PNG")
+                bytes_qr = buffer.getvalue()
 
-            col_img, col_btn = st.columns([1, 2])
-            with col_img:
-                st.image(bytes_qr, caption=alumno_sel["QR Token"], width=220)
-            with col_btn:
-                st.write(f"**Catequizando:** {alumno_sel['Nombres']} {alumno_sel['Apellidos']}")
-                st.write(f"**DNI:** {alumno_sel['DNI']}")
-                st.download_button(
-                    label="⬇️ Descargar QR en PNG",
-                    data=bytes_qr,
-                    file_name=f"QR_{alumno_sel['DNI']}_{alumno_sel['Apellidos']}.png",
-                    mime="image/png"
-                )
+                col_img, col_btn = st.columns([1, 2])
+                with col_img:
+                    st.image(bytes_qr, caption=alumno_sel["QR Token"], width=220)
+                with col_btn:
+                    st.write(f"**Catequizando:** {alumno_sel['Nombres']} {alumno_sel['Apellidos']}")
+                    st.write(f"**DNI:** {alumno_sel['DNI']}")
+                    st.download_button(
+                        label="⬇️ Descargar QR en PNG",
+                        data=bytes_qr,
+                        file_name=f"QR_{alumno_sel['DNI']}_{alumno_sel['Apellidos']}.png",
+                        mime="image/png"
+                    )
 
             st.divider()
             with st.expander("✏️ Editar o Eliminar Catequizando"):
-                opciones_edit = {f"{j['Nombres']} {j['Apellidos']} (DNI: {j['DNI']})": j for j in lista}
-                sel_edit = st.selectbox(
-                    "Selecciona el catequizando a modificar:",
-                    list(opciones_edit.keys()),
-                    key="sel_edit_cat"
-                )
-                cat_obj = opciones_edit[sel_edit]
+                opciones_edit = {f"ID {j['ID']} - {j['Nombres']} {j['Apellidos']} (DNI: {j['DNI']})": j for j in lista}
+                cat_obj = selector_con_buscador("Catequizando a modificar", opciones_edit, "edit_cat")
 
-                with st.form("form_editar_catequizando"):
-                    c1, c2, c3 = st.columns(3)
-                    edit_dni = c1.text_input("DNI", value=cat_obj["DNI"], max_chars=8)
-                    edit_nom = c2.text_input("Nombres", value=cat_obj["Nombres"])
-                    edit_ape = c3.text_input("Apellidos", value=cat_obj["Apellidos"])
-                    if st.form_submit_button("💾 Guardar Cambios"):
-                        r_up = requests.put(
-                            f"{API_URL}/api/v1/catequizandos/{cat_obj['ID']}",
-                            json={"dni": edit_dni, "nombres": edit_nom, "apellidos": edit_ape},
-                            timeout=15
-                        )
-                        if r_up.status_code == 200:
-                            st.success("Datos actualizados correctamente.")
+                if cat_obj:
+                    with st.form(f"form_editar_cat_{cat_obj['ID']}"):
+                        c1, c2, c3 = st.columns(3)
+                        edit_dni = c1.text_input("DNI", value=cat_obj["DNI"], max_chars=8)
+                        edit_nom = c2.text_input("Nombres", value=cat_obj["Nombres"])
+                        edit_ape = c3.text_input("Apellidos", value=cat_obj["Apellidos"])
+                        if st.form_submit_button("💾 Guardar Cambios"):
+                            r_up = requests.put(
+                                f"{API_URL}/api/v1/catequizandos/{cat_obj['ID']}",
+                                json={"dni": edit_dni, "nombres": edit_nom, "apellidos": edit_ape},
+                                timeout=15
+                            )
+                            if r_up.status_code == 200:
+                                st.success("Datos actualizados correctamente.")
+                                st.rerun()
+                            else:
+                                st.error(r_up.json().get("detail", "Error al actualizar."))
+
+                    if st.button("🗑️ Eliminar este Catequizando", type="secondary", key=f"btn_del_cat_{cat_obj['ID']}"):
+                        r_del = requests.delete(f"{API_URL}/api/v1/catequizandos/{cat_obj['ID']}", timeout=15)
+                        if r_del.status_code == 200:
+                            st.success("Catequizando eliminado.")
                             st.rerun()
                         else:
-                            st.error(r_up.json().get("detail", "Error al actualizar."))
-
-                if st.button("🗑️ Eliminar este Catequizando", type="secondary", key="btn_del_cat"):
-                    r_del = requests.delete(f"{API_URL}/api/v1/catequizandos/{cat_obj['ID']}", timeout=15)
-                    if r_del.status_code == 200:
-                        st.success("Catequizando eliminado.")
-                        st.rerun()
-                    else:
-                        st.error(r_del.json().get("detail", "No se pudo eliminar."))
+                            st.error(r_del.json().get("detail", "No se pudo eliminar."))
         else:
             st.warning("Aún no hay catequizandos registrados.")
     else:
@@ -348,25 +366,34 @@ elif pagina == "📋 Control de Asistencias":
         if resp.status_code == 200:
             registros = resp.json()
             if registros:
+                nombre_slug = tipo_filtro.lower().replace(" ", "_")
                 df = pd.DataFrame(registros)
                 if not mostrar_actividad and "Actividad" in df.columns:
                     df = df.drop(columns=["Actividad"])
+
+                busq_asis = st.text_input(
+                    "🔍 Buscar asistencia por DNI, nombre, fecha o actividad:",
+                    key=f"busq_tabla_asis_{nombre_slug}"
+                )
+                if busq_asis:
+                    df = df[df.apply(lambda row: busq_asis.lower() in row.astype(str).str.lower().to_string(), axis=1)]
+
                 st.dataframe(df, use_container_width=True, hide_index=True)
-                nombre_slug = tipo_filtro.lower().replace(" ", "_")
                 mostrar_botones_exportacion(df, f"asistencias_{nombre_slug}", f"Asistencias - {tipo_filtro}")
 
                 with st.expander("🗑️ Eliminar asistencia duplicada o errónea"):
                     opciones_asis = {
-                        f"ID {r['ID']} - {r['Catequizando']} ({r['Fecha y Hora']})": r["ID"]
+                        f"ID {r['ID']} - {r['Catequizando']} (DNI: {r['DNI']}) | {r['Fecha y Hora']}": r["ID"]
                         for r in registros
                     }
-                    asis_sel = st.selectbox(
-                        "Selecciona el registro a eliminar:",
-                        list(opciones_asis.keys()),
-                        key=f"sel_del_asis_{nombre_slug}"
+                    id_asis_sel = selector_con_buscador(
+                        "Asistencia a eliminar",
+                        opciones_asis,
+                        f"del_asis_{nombre_slug}",
+                        placeholder="Buscar por DNI, nombre, ID o fecha..."
                     )
-                    if st.button("Eliminar Asistencia", key=f"btn_del_asis_{nombre_slug}"):
-                        r_del = requests.delete(f"{API_URL}/api/v1/asistencias/{opciones_asis[asis_sel]}", timeout=15)
+                    if id_asis_sel and st.button("Eliminar Asistencia", key=f"btn_del_asis_{nombre_slug}"):
+                        r_del = requests.delete(f"{API_URL}/api/v1/asistencias/{id_asis_sel}", timeout=15)
                         if r_del.status_code == 200:
                             st.success("Asistencia eliminada.")
                             st.rerun()
@@ -473,22 +500,28 @@ elif pagina == "💰 Tesorería":
             if lista_pagos:
                 st.metric("Total Recaudado", f"S/ {data_pagos.get('total_recaudado', 0):.2f}")
                 df_pagos = pd.DataFrame(lista_pagos)
+
+                busq_pagos = st.text_input("🔍 Buscar pago por DNI, alumno, concepto o método:", key="busq_tabla_pagos")
+                if busq_pagos:
+                    df_pagos = df_pagos[df_pagos.apply(lambda row: busq_pagos.lower() in row.astype(str).str.lower().to_string(), axis=1)]
+
                 st.dataframe(df_pagos, use_container_width=True, hide_index=True)
                 mostrar_botones_exportacion(df_pagos, "reporte_pagos", "Reporte de Tesoreria - Pagos")
 
                 with st.expander("🗑️ Anular / Eliminar un Pago"):
                     opciones_pagos = {
-                        f"ID {p['id_pago']} - {p['alumno']} | {p['concepto']} (S/ {p['monto']})": p["id_pago"]
+                        f"ID {p['id_pago']} - {p['alumno']} (DNI: {p['dni']}) | {p['concepto']} (S/ {p['monto']})": p["id_pago"]
                         for p in lista_pagos
                     }
-                    pago_sel = st.selectbox(
-                        "Selecciona el pago a anular:",
-                        list(opciones_pagos.keys()),
-                        key="sel_del_pago"
+                    id_pago_sel = selector_con_buscador(
+                        "Pago a anular",
+                        opciones_pagos,
+                        "del_pago",
+                        placeholder="Buscar por DNI, alumno, concepto o ID..."
                     )
-                    if st.button("Anular Pago Seleccionado", key="btn_del_pago"):
+                    if id_pago_sel and st.button("Anular Pago Seleccionado", key="btn_del_pago"):
                         r_del = requests.delete(
-                            f"{API_URL}/api/v1/tesoreria/pagos/{opciones_pagos[pago_sel]}",
+                            f"{API_URL}/api/v1/tesoreria/pagos/{id_pago_sel}",
                             timeout=15
                         )
                         if r_del.status_code == 200:
@@ -539,14 +572,10 @@ elif pagina == "📁 Secretaría":
             st.dataframe(pd.DataFrame(lista_docs), use_container_width=True, hide_index=True)
             with st.expander("🗑️ Eliminar Documento del Catálogo"):
                 opciones_del_doc = {f"{d['nombre_doc']} (ID: {d['id_doc']})": d["id_doc"] for d in lista_docs}
-                doc_del_sel = st.selectbox(
-                    "Selecciona el documento a eliminar:",
-                    list(opciones_del_doc.keys()),
-                    key="sel_del_doc"
-                )
-                if st.button("Eliminar Documento", key="btn_del_doc"):
+                id_doc_sel = selector_con_buscador("Documento a eliminar", opciones_del_doc, "del_doc", placeholder="Buscar documento...")
+                if id_doc_sel and st.button("Eliminar Documento", key="btn_del_doc"):
                     r_del = requests.delete(
-                        f"{API_URL}/api/v1/secretaria/documentos/{opciones_del_doc[doc_del_sel]}",
+                        f"{API_URL}/api/v1/secretaria/documentos/{id_doc_sel}",
                         timeout=15
                     )
                     if r_del.status_code == 200:
@@ -594,46 +623,41 @@ elif pagina == "📁 Secretaría":
 
         st.subheader("Consultar Expediente por Catequizando")
         if lista_jovenes:
-            opciones_consulta = {f"{j['Nombres']} {j['Apellidos']} (DNI: {j['DNI']})": j["DNI"] for j in lista_jovenes}
-            alumno_consulta = st.selectbox(
-                "Selecciona un catequizando para ver sus documentos:",
-                list(opciones_consulta.keys())
-            )
-            dni_consulta = opciones_consulta[alumno_consulta]
+            opciones_consulta = {f"{j['Nombres']} {j['Apellidos']} (DNI: {j['DNI']})": j for j in lista_jovenes}
+            cat_consulta = selector_con_buscador("Catequizando a consultar", opciones_consulta, "consulta_exp")
 
-            resp_exp = requests.get(f"{API_URL}/api/v1/secretaria/expedientes/{dni_consulta}", timeout=15)
-            if resp_exp.status_code == 200:
-                docs_alumno = resp_exp.json().get("documentos", [])
-                if docs_alumno:
-                    df_exp = pd.DataFrame(docs_alumno)
-                    st.dataframe(df_exp, use_container_width=True, hide_index=True)
-                    mostrar_botones_exportacion(df_exp, f"expediente_{dni_consulta}", f"Expediente - {alumno_consulta}")
+            if cat_consulta:
+                dni_consulta = cat_consulta["DNI"]
+                nombre_consulta = f"{cat_consulta['Nombres']} {cat_consulta['Apellidos']}"
+                resp_exp = requests.get(f"{API_URL}/api/v1/secretaria/expedientes/{dni_consulta}", timeout=15)
+                if resp_exp.status_code == 200:
+                    docs_alumno = resp_exp.json().get("documentos", [])
+                    if docs_alumno:
+                        df_exp = pd.DataFrame(docs_alumno)
+                        st.dataframe(df_exp, use_container_width=True, hide_index=True)
+                        mostrar_botones_exportacion(df_exp, f"expediente_{dni_consulta}", f"Expediente - {nombre_consulta}")
 
-                    with st.expander("🗑️ Eliminar Registro de Expediente"):
-                        opciones_del_exp = {
-                            f"ID {d['id_exp']} - {d['documento']} ({d['estado']})": d["id_exp"]
-                            for d in docs_alumno if "id_exp" in d
-                        }
-                        if opciones_del_exp:
-                            exp_del_sel = st.selectbox(
-                                "Selecciona el registro a eliminar:",
-                                list(opciones_del_exp.keys()),
-                                key="sel_del_exp"
-                            )
-                            if st.button("Eliminar Registro", key="btn_del_exp"):
-                                r_del = requests.delete(
-                                    f"{API_URL}/api/v1/secretaria/expedientes/{opciones_del_exp[exp_del_sel]}",
-                                    timeout=15
-                                )
-                                if r_del.status_code == 200:
-                                    st.success("Registro de expediente eliminado.")
-                                    st.rerun()
-                                else:
-                                    st.error("No se pudo eliminar el registro.")
+                        with st.expander("🗑️ Eliminar Registro de Expediente"):
+                            opciones_del_exp = {
+                                f"ID {d['id_exp']} - {d['documento']} ({d['estado']})": d["id_exp"]
+                                for d in docs_alumno if "id_exp" in d
+                            }
+                            if opciones_del_exp:
+                                id_exp_sel = selector_con_buscador("Registro de expediente a eliminar", opciones_del_exp, "del_exp")
+                                if id_exp_sel and st.button("Eliminar Registro", key="btn_del_exp"):
+                                    r_del = requests.delete(
+                                        f"{API_URL}/api/v1/secretaria/expedientes/{id_exp_sel}",
+                                        timeout=15
+                                    )
+                                    if r_del.status_code == 200:
+                                        st.success("Registro de expediente eliminado.")
+                                        st.rerun()
+                                    else:
+                                        st.error(f"No se pudo eliminar ({r_del.status_code}): {r_del.text}")
+                    else:
+                        st.info("Este catequizando aún no tiene documentos registrados.")
                 else:
-                    st.info("Este catequizando aún no tiene documentos registrados.")
-            else:
-                st.error("No se pudo consultar el expediente.")
+                    st.error("No se pudo consultar el expediente.")
 
 # =========================================================
 # SECCIÓN 6: ACCESOS TEMPORALES (SOLO ADMIN)
@@ -733,10 +757,10 @@ elif pagina == "👤 Gestión de Usuarios":
         st.dataframe(pd.DataFrame(usuarios), use_container_width=True, hide_index=True)
 
         opciones_del = {f"{u['Nombre']} - {u['Rol']} (DNI: {u['DNI']})": u["ID"] for u in usuarios}
-        u_eliminar = st.selectbox("Seleccionar usuario para eliminar:", list(opciones_del.keys()))
-        if st.button("🗑️ Eliminar Usuario Seleccionado"):
+        id_u_eliminar = selector_con_buscador("Usuario a eliminar", opciones_del, "del_usuario", placeholder="Buscar por DNI, nombre o rol...")
+        if id_u_eliminar and st.button("🗑️ Eliminar Usuario Seleccionado"):
             r_del = requests.delete(
-                f"{API_URL}/api/v1/admin/usuarios/{opciones_del[u_eliminar]}",
+                f"{API_URL}/api/v1/admin/usuarios/{id_u_eliminar}",
                 timeout=15
             )
             if r_del.status_code == 200:
