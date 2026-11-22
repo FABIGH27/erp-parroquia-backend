@@ -334,6 +334,7 @@ def consultar_expediente_alumno(dni: str, db: Session = Depends(get_db)):
 
     registros = (
         db.query(
+            models.Expediente.id_exp,
             models.DocumentoRequisito.nombre_doc,
             models.DocumentoRequisito.es_obligatorio,
             models.Expediente.estado,
@@ -349,6 +350,7 @@ def consultar_expediente_alumno(dni: str, db: Session = Depends(get_db)):
         "alumno": f"{alumno.nombres} {alumno.apellidos}",
         "documentos": [
             {
+                "id_exp": r.id_exp,
                 "documento": r.nombre_doc,
                 "obligatorio": r.es_obligatorio,
                 "estado": r.estado,
