@@ -45,3 +45,8 @@ class UsuarioCreate(BaseModel):
     nombre: str
     password: str
     rol: str
+
+class CatequizandoUpdate(BaseModel):
+    dni: str
+    nombres: str
+    apellidos: str

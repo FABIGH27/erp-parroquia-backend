@@ -288,6 +288,37 @@ elif pagina == "👥 Directorio de Catequizandos":
                     file_name=f"QR_{alumno_sel['DNI']}_{alumno_sel['Apellidos']}.png",
                     mime="image/png"
                 )
+            st.divider()
+            with st.expander("✏️ Editar o Eliminar Catequizando"):
+                opciones_edit = {f"{j['Nombres']} {j['Apellidos']} (DNI: {j['DNI']})": j for j in lista}
+                sel_edit = st.selectbox("Selecciona el catequizando a modificar:", list(opciones_edit.keys()),
+                                        key="sel_edit_cat")
+                cat_obj = opciones_edit[sel_edit]
+
+                with st.form("form_editar_catequizando"):
+                    c1, c2, c3 = st.columns(3)
+                    edit_dni = c1.text_input("DNI", value=cat_obj["DNI"], max_chars=8)
+                    edit_nom = c2.text_input("Nombres", value=cat_obj["Nombres"])
+                    edit_ape = c3.text_input("Apellidos", value=cat_obj["Apellidos"])
+                    if st.form_submit_button("💾 Guardar Cambios"):
+                        r_up = requests.put(
+                            f"{API_URL}/api/v1/catequizandos/{cat_obj['ID']}",
+                            json={"dni": edit_dni, "nombres": edit_nom, "apellidos": edit_ape},
+                            timeout=15
+                        )
+                        if r_up.status_code == 200:
+                            st.success("Datos actualizados correctamente.")
+                            st.rerun()
+                        else:
+                            st.error(r_up.json().get("detail", "Error al actualizar."))
+
+                if st.button("🗑️ Eliminar este Catequizando", type="secondary", key="btn_del_cat"):
+                    r_del = requests.delete(f"{API_URL}/api/v1/catequizandos/{cat_obj['ID']}", timeout=15)
+                    if r_del.status_code == 200:
+                        st.success("Catequizando eliminado.")
+                        st.rerun()
+                    else:
+                        st.error(r_del.json().get("detail", "No se pudo eliminar."))
         else:
             st.warning("Aún no hay catequizandos registrados.")
     else:
@@ -316,6 +347,23 @@ elif pagina == "📋 Control de Asistencias":
                 st.dataframe(df, use_container_width=True, hide_index=True)
                 nombre_slug = tipo_filtro.lower().replace(" ", "_")
                 mostrar_botones_exportacion(df, f"asistencias_{nombre_slug}", f"Asistencias - {tipo_filtro}")
+                with st.expander("🗑️ Eliminar asistencia duplicada o errónea"):
+                    opciones_asis = {
+                        f"ID {r['ID']} - {r['Catequizando']} ({r['Fecha y Hora']})": r["ID"]
+                        for r in registros
+                    }
+                    asis_sel = st.selectbox(
+                        "Selecciona el registro a eliminar:",
+                        list(opciones_asis.keys()),
+                        key=f"sel_del_asis_{nombre_slug}"
+                    )
+                    if st.button("Eliminar Asistencia", key=f"btn_del_asis_{nombre_slug}"):
+                        r_del = requests.delete(f"{API_URL}/api/v1/asistencias/{opciones_asis[asis_sel]}", timeout=15)
+                        if r_del.status_code == 200:
+                            st.success("Asistencia eliminada.")
+                            st.rerun()
+                        else:
+                            st.error("No se pudo eliminar la asistencia.")
             else:
                 st.info(f"No hay asistencias registradas en {tipo_filtro}.")
         else:
@@ -419,6 +467,21 @@ elif pagina == "💰 Tesorería":
                 df_pagos = pd.DataFrame(lista_pagos)
                 st.dataframe(df_pagos, use_container_width=True, hide_index=True)
                 mostrar_botones_exportacion(df_pagos, "reporte_pagos", "Reporte de Tesoreria - Pagos")
+                with st.expander("🗑️ Anular / Eliminar un Pago"):
+                    opciones_pagos = {
+                        f"ID {p['id_pago']} - {p['alumno']} | {p['concepto']} (S/ {p['monto']})": p["id_pago"]
+                        for p in lista_pagos
+                    }
+                    pago_sel = st.selectbox("Selecciona el pago a anular:", list(opciones_pagos.keys()),
+                                            key="sel_del_pago")
+                    if st.button("Anular Pago Seleccionado", key="btn_del_pago"):
+                        r_del = requests.delete(f"{API_URL}/api/v1/tesoreria/pagos/{opciones_pagos[pago_sel]}",
+                                                timeout=15)
+                        if r_del.status_code == 200:
+                            st.success("Pago anulado correctamente.")
+                            st.rerun()
+                        else:
+                            st.error("No se pudo anular el pago.")
             else:
                 st.info("Aún no hay pagos registrados.")
         else:

@@ -10,6 +10,7 @@ from database import engine, get_db
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 import secrets
+from sqlalchemy.exc import IntegrityError
 
 
 # Sincroniza y crea las tablas en MySQL si no existen
@@ -634,3 +635,67 @@ def eliminar_usuario(id_usuario: int, db: Session = Depends(get_db)):
     db.delete(usuario)
     db.commit()
     return {"mensaje": "Usuario eliminado correctamente."}
+
+# =========================================================
+# EDICIÓN Y ELIMINACIÓN DE REGISTROS (CRUD COMPLETO)
+# =========================================================
+@app.put("/api/v1/catequizandos/{id_cateq}", tags=["Gestión de Catequizandos"])
+def editar_catequizando(id_cateq: int, datos: schemas.CatequizandoUpdate, db: Session = Depends(get_db)):
+    alumno = db.query(models.Catequizando).filter(models.Catequizando.id_cateq == id_cateq).first()
+    if not alumno:
+        raise HTTPException(status_code=404, detail="Catequizando no encontrado.")
+
+    dni_limpio = datos.dni.strip()
+    # Verificar que el nuevo DNI no pertenezca a otro alumno
+    duplicado = db.query(models.Catequizando).filter(
+        models.Catequizando.dni == dni_limpio,
+        models.Catequizando.id_cateq != id_cateq
+    ).first()
+    if duplicado:
+        raise HTTPException(status_code=400, detail="Ese DNI ya pertenece a otro catequizando.")
+
+    alumno.dni = dni_limpio
+    alumno.nombres = datos.nombres.strip()
+    alumno.apellidos = datos.apellidos.strip()
+    alumno.qr_token = f"CAT-{dni_limpio}"
+
+    db.commit()
+    db.refresh(alumno)
+    return {"mensaje": "Catequizando actualizado correctamente", "qr_token": alumno.qr_token}
+
+
+@app.delete("/api/v1/catequizandos/{id_cateq}", tags=["Gestión de Catequizandos"])
+def eliminar_catequizando(id_cateq: int, db: Session = Depends(get_db)):
+    alumno = db.query(models.Catequizando).filter(models.Catequizando.id_cateq == id_cateq).first()
+    if not alumno:
+        raise HTTPException(status_code=404, detail="Catequizando no encontrado.")
+    try:
+        db.delete(alumno)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="No se puede eliminar porque tiene pagos registrados. Anula sus pagos primero."
+        )
+    return {"mensaje": "Catequizando eliminado correctamente."}
+
+
+@app.delete("/api/v1/asistencias/{id_asis}", tags=["Logística y Escáner QR"])
+def eliminar_asistencia(id_asis: int, db: Session = Depends(get_db)):
+    asis = db.query(models.Asistencia).filter(models.Asistencia.id_asis == id_asis).first()
+    if not asis:
+        raise HTTPException(status_code=404, detail="Asistencia no encontrada.")
+    db.delete(asis)
+    db.commit()
+    return {"mensaje": "Asistencia eliminada correctamente."}
+
+
+@app.delete("/api/v1/tesoreria/pagos/{id_pago}", tags=["Tesorería"])
+def eliminar_pago(id_pago: int, db: Session = Depends(get_db)):
+    pago = db.query(models.Pago).filter(models.Pago.id_pago == id_pago).first()
+    if not pago:
+        raise HTTPException(status_code=404, detail="Pago no encontrado.")
+    db.delete(pago)
+    db.commit()
+    return {"mensaje": "Pago anulado y eliminado correctamente."}
