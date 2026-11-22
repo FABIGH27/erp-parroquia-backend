@@ -13,7 +13,12 @@ SQLALCHEMY_DATABASE_URL = os.getenv(
 )
 
 # Motor de conexión a MySQL (echo=True imprime las consultas SQL en la terminal para debugear)
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL,
+    connect_args={"ssl": {"ca": "/etc/ssl/certs/ca-certificates.crt"}}, # deja el connect_args que ya tenías
+    pool_pre_ping=True,
+    pool_recycle=280
+)
 
 # Fábrica de sesiones transaccionales
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
