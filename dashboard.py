@@ -3,6 +3,71 @@ import requests
 import pandas as pd
 import qrcode
 from io import BytesIO
+from datetime import datetime
+from fpdf import FPDF
+
+def generar_excel(df: pd.DataFrame) -> bytes:
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Reporte")
+    return output.getvalue()
+
+def generar_pdf(df: pd.DataFrame, titulo: str) -> bytes:
+    pdf = FPDF(orientation="L", unit="mm", format="A4")
+    pdf.set_auto_page_break(auto=True, margin=12)
+    pdf.add_page()
+
+    # Encabezado
+    pdf.set_font("Helvetica", "B", 14)
+    titulo_limpio = titulo.encode("latin-1", "replace").decode("latin-1")
+    pdf.cell(0, 10, f"ERP Parroquial - {titulo_limpio}", ln=True, align="C")
+
+    pdf.set_font("Helvetica", "", 9)
+    pdf.cell(0, 6, f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M')}", ln=True, align="C")
+    pdf.ln(4)
+
+    # Ancho dinámico según número de columnas
+    columnas = list(df.columns)
+    ancho_util = 277  # A4 horizontal (297mm - 20mm márgenes)
+    ancho_col = ancho_util / max(len(columnas), 1)
+
+    # Cabecera de tabla
+    pdf.set_font("Helvetica", "B", 8)
+    pdf.set_fill_color(230, 230, 230)
+    for col in columnas:
+        texto = str(col)[:22].encode("latin-1", "replace").decode("latin-1")
+        pdf.cell(ancho_col, 7, texto, border=1, fill=True, align="C")
+    pdf.ln()
+
+    # Filas
+    pdf.set_font("Helvetica", "", 8)
+    for _, fila in df.iterrows():
+        for col in columnas:
+            valor = str(fila[col])[:28].encode("latin-1", "replace").decode("latin-1")
+            pdf.cell(ancho_col, 6, valor, border=1, align="L")
+        pdf.ln()
+
+    return bytes(pdf.output())
+
+def mostrar_botones_exportacion(df: pd.DataFrame, nombre_base: str, titulo_pdf: str):
+    c1, c2, _ = st.columns([1, 1, 3])
+    fecha = datetime.now().strftime("%Y%m%d")
+    with c1:
+        st.download_button(
+            label="📊 Descargar Excel",
+            data=generar_excel(df),
+            file_name=f"{nombre_base}_{fecha}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key=f"xlsx_{nombre_base}"
+        )
+    with c2:
+        st.download_button(
+            label="📄 Descargar PDF",
+            data=generar_pdf(df, titulo_pdf),
+            file_name=f"{nombre_base}_{fecha}.pdf",
+            mime="application/pdf",
+            key=f"pdf_{nombre_base}"
+        )
 
 st.set_page_config(page_title="ERP Parroquia - Confirmación", layout="wide")
 
@@ -198,6 +263,7 @@ elif pagina == "👥 Directorio de Catequizandos":
             if busqueda:
                 df = df[df.apply(lambda row: busqueda.lower() in row.astype(str).str.lower().to_string(), axis=1)]
             st.dataframe(df, use_container_width=True, hide_index=True)
+            mostrar_botones_exportacion(df, "directorio_catequizandos", "Directorio de Catequizandos")
 
             st.divider()
             st.subheader("🎫 Generar y Descargar Código QR")
@@ -248,6 +314,8 @@ elif pagina == "📋 Control de Asistencias":
                 if not mostrar_actividad and "Actividad" in df.columns:
                     df = df.drop(columns=["Actividad"])
                 st.dataframe(df, use_container_width=True, hide_index=True)
+                nombre_slug = tipo_filtro.lower().replace(" ", "_")
+                mostrar_botones_exportacion(df, f"asistencias_{nombre_slug}", f"Asistencias - {tipo_filtro}")
             else:
                 st.info(f"No hay asistencias registradas en {tipo_filtro}.")
         else:
@@ -346,6 +414,9 @@ elif pagina == "💰 Tesorería":
         resp_pagos = requests.get(f"{API_URL}/api/v1/pagos", timeout=15)
         if resp_pagos.status_code == 200 and resp_pagos.json():
             st.dataframe(pd.DataFrame(resp_pagos.json()), use_container_width=True, hide_index=True)
+            df_pagos = pd.DataFrame(resp_pagos.json())
+            st.dataframe(df_pagos, use_container_width=True, hide_index=True)
+            mostrar_botones_exportacion(df_pagos, "reporte_pagos", "Reporte de Tesoreria - Pagos")
         else:
             st.info("Aún no hay pagos registrados.")
 
@@ -431,6 +502,9 @@ elif pagina == "📁 Secretaría":
         resp_exp = requests.get(f"{API_URL}/api/v1/expedientes", timeout=15)
         if resp_exp.status_code == 200 and resp_exp.json():
             st.dataframe(pd.DataFrame(resp_exp.json()), use_container_width=True, hide_index=True)
+            df_exp = pd.DataFrame(resp_exp.json())
+            st.dataframe(df_exp, use_container_width=True, hide_index=True)
+            mostrar_botones_exportacion(df_exp, "reporte_expedientes", "Reporte de Secretaria - Expedientes")
         else:
             st.info("Aún no hay expedientes registrados.")
 
