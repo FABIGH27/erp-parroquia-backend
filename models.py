@@ -92,3 +92,12 @@ class Expediente(Base):
     id_usuario = Column(Integer, ForeignKey("usuarios.id_usuario", ondelete="RESTRICT"), nullable=False)
     estado = Column(Enum("Entregado", "Pendiente", "Observado"), nullable=False)
     fecha_rec = Column(TIMESTAMP, nullable=True, default=None)
+
+class ClaveTemporal(Base):
+    __tablename__ = "claves_temporales"
+
+    id_clave = Column(Integer, primary_key=True, index=True)
+    codigo = Column(String(50), unique=True, nullable=False)
+    fecha_expiracion = Column(DateTime, nullable=True)
+    activa = Column(Boolean, default=True, nullable=False)
+    creado_en = Column(DateTime, default=func.now())

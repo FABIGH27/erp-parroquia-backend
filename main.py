@@ -8,6 +8,8 @@ import security
 import schemas
 from database import engine, get_db
 from pydantic import BaseModel
+from datetime import datetime, timedelta
+import secrets
 
 
 # Sincroniza y crea las tablas en MySQL si no existen
@@ -510,3 +512,71 @@ def listar_asistencias(tipo: str | None = None, db: Session = Depends(get_db)):
         }
         for r in registros
     ]
+
+@app.post("/api/v1/admin/claves-temporales", tags=["Seguridad y Accesos"])
+def crear_clave_temporal(datos: schemas.ClaveTemporalCreate, db: Session = Depends(get_db)):
+    ahora = datetime.utcnow()
+    if datos.duracion == "24h":
+        expira = ahora + timedelta(hours=24)
+    elif datos.duracion == "48h":
+        expira = ahora + timedelta(hours=48)
+    elif datos.duracion == "7d":
+        expira = ahora + timedelta(days=7)
+    elif datos.duracion == "indeterminado":
+        expira = None
+    else:
+        raise HTTPException(status_code=400, detail="Duración no válida.")
+
+    codigo_generado = f"TMP-{secrets.token_hex(3).upper()}"
+    nueva_clave = models.ClaveTemporal(
+        codigo=codigo_generado,
+        fecha_expiracion=expira,
+        activa=True
+    )
+    db.add(nueva_clave)
+    db.commit()
+    db.refresh(nueva_clave)
+
+    return {
+        "codigo": nueva_clave.codigo,
+        "expira": nueva_clave.fecha_expiracion.isoformat() if nueva_clave.fecha_expiracion else "Indeterminado"
+    }
+
+@app.get("/api/v1/admin/claves-temporales", tags=["Seguridad y Accesos"])
+def listar_claves_temporales(db: Session = Depends(get_db)):
+    claves = db.query(models.ClaveTemporal).order_by(models.ClaveTemporal.id_clave.desc()).all()
+    ahora = datetime.utcnow()
+    resultado = []
+    for c in claves:
+        vigente = c.activa and (c.fecha_expiracion is None or c.fecha_expiracion > ahora)
+        resultado.append({
+            "ID": c.id_clave,
+            "Código": c.codigo,
+            "Expira (UTC)": c.fecha_expiracion.strftime("%Y-%m-%d %H:%M") if c.fecha_expiracion else "Indeterminado",
+            "Estado": "Activa" if vigente else "Inactiva / Vencida"
+        })
+    return resultado
+
+@app.put("/api/v1/admin/claves-temporales/{id_clave}/revocar", tags=["Seguridad y Accesos"])
+def revocar_clave_temporal(id_clave: int, db: Session = Depends(get_db)):
+    clave = db.query(models.ClaveTemporal).filter(models.ClaveTemporal.id_clave == id_clave).first()
+    if not clave:
+        raise HTTPException(status_code=404, detail="Clave no encontrada.")
+    clave.activa = False
+    db.commit()
+    return {"mensaje": "Clave revocada correctamente."}
+
+@app.post("/api/v1/admin/validar-clave-temporal", tags=["Seguridad y Accesos"])
+def validar_clave_temporal(datos: schemas.ClaveTemporalValidar, db: Session = Depends(get_db)):
+    clave = db.query(models.ClaveTemporal).filter(
+        models.ClaveTemporal.codigo == datos.codigo.strip().upper(),
+        models.ClaveTemporal.activa == True
+    ).first()
+
+    if not clave:
+        raise HTTPException(status_code=401, detail="Clave inválida o revocada.")
+
+    if clave.fecha_expiracion is not None and clave.fecha_expiracion < datetime.utcnow():
+        raise HTTPException(status_code=401, detail="Esta clave temporal ya expiró.")
+
+    return {"valida": True, "mensaje": "Acceso total desbloqueado para esta sesión."}

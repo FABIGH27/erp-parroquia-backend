@@ -14,6 +14,9 @@ if "admin_logueado" not in st.session_state:
     st.session_state["admin_info"] = ""
     st.session_state["admin_rol"] = ""
 
+if "acceso_temporal" not in st.session_state:
+    st.session_state["acceso_temporal"] = False
+
 # =========================================================
 # PANTALLA DE INICIO DE SESIÓN GENERAL
 # =========================================================
@@ -22,7 +25,7 @@ if not st.session_state["admin_logueado"]:
     with col_centro:
         st.title("⛪ ERP Parroquial - Confirmación")
         st.subheader("🔒 Inicio de Sesión Administrativo")
-        st.caption("Ingresa con tu cuenta de Coordinador, Secretario o Tesorero.")
+        st.caption("Ingresa con tu cuenta de Coordinador, Secretario, Tesorero o Vocal.")
 
         with st.form("login_general_form"):
             dni_input = st.text_input("DNI de Usuario")
@@ -41,6 +44,7 @@ if not st.session_state["admin_logueado"]:
                         st.session_state["admin_logueado"] = True
                         st.session_state["admin_info"] = f"{data['usuario']} ({data['rol']})"
                         st.session_state["admin_rol"] = data["rol"]
+                        st.session_state["acceso_temporal"] = False
                         st.rerun()
                     else:
                         st.error(resp.json().get("detail", "Credenciales inválidas."))
@@ -50,27 +54,70 @@ if not st.session_state["admin_logueado"]:
     st.stop()
 
 # =========================================================
-# MENÚ LATERAL (SIDEBAR)
+# MENÚ LATERAL (SIDEBAR) CON PERMISOS POR ROL (RBAC)
 # =========================================================
 st.sidebar.title("⛪ ERP Parroquia")
 st.sidebar.success(f"👤 {st.session_state['admin_info']}")
 
-pagina = st.sidebar.radio(
-    "Navegación",
-    [
-        "📊 Resumen General",
-        "👥 Directorio de Catequizandos",
-        "📋 Control de Asistencias",
-        "💰 Tesorería",
-        "📁 Secretaría"
-    ]
-)
+rol_actual = st.session_state.get("admin_rol", "").strip().lower()
+es_admin = rol_actual in ["administrador", "admin", "coordinador"]
+
+TODOS_LOS_MODULOS = [
+    "📊 Resumen General",
+    "👥 Directorio de Catequizandos",
+    "📋 Control de Asistencias",
+    "💰 Tesorería",
+    "📁 Secretaría"
+]
+
+PERMISOS_POR_ROL = {
+    "administrador": TODOS_LOS_MODULOS + ["🔐 Accesos Temporales"],
+    "admin": TODOS_LOS_MODULOS + ["🔐 Accesos Temporales"],
+    "coordinador": TODOS_LOS_MODULOS + ["🔐 Accesos Temporales"],
+    "vocal": ["📊 Resumen General", "👥 Directorio de Catequizandos", "📋 Control de Asistencias"],
+    "tesorero": ["📊 Resumen General", "💰 Tesorería"],
+    "tesorera": ["📊 Resumen General", "💰 Tesorería"],
+    "secretario": ["📊 Resumen General", "👥 Directorio de Catequizandos", "📁 Secretaría"],
+    "secretaria": ["📊 Resumen General", "👥 Directorio de Catequizandos", "📁 Secretaría"],
+    "catequista": ["👥 Directorio de Catequizandos", "📋 Control de Asistencias"],
+}
+
+if st.session_state["acceso_temporal"]:
+    opciones_menu = TODOS_LOS_MODULOS
+else:
+    opciones_menu = PERMISOS_POR_ROL.get(rol_actual, ["📊 Resumen General"])
+
+pagina = st.sidebar.radio("Navegación", opciones_menu)
+
+# Cajita para que otros roles ingresen una clave temporal
+if not es_admin:
+    st.sidebar.divider()
+    if st.session_state["acceso_temporal"]:
+        st.sidebar.info("🔓 Acceso temporal activo")
+    else:
+        with st.sidebar.expander("🔑 ¿Tienes clave temporal?"):
+            clave_ingresada = st.text_input("Código temporal", placeholder="Ej: TMP-A1B2C3")
+            if st.button("Desbloquear módulos", use_container_width=True):
+                try:
+                    r = requests.post(
+                        f"{API_URL}/api/v1/admin/validar-clave-temporal",
+                        json={"codigo": clave_ingresada},
+                        timeout=15
+                    )
+                    if r.status_code == 200:
+                        st.session_state["acceso_temporal"] = True
+                        st.rerun()
+                    else:
+                        st.error(r.json().get("detail", "Clave inválida."))
+                except Exception as e:
+                    st.error(f"Error de conexión: {e}")
 
 st.sidebar.divider()
 if st.sidebar.button("🚪 Cerrar sesión", use_container_width=True):
     st.session_state["admin_logueado"] = False
     st.session_state["admin_info"] = ""
     st.session_state["admin_rol"] = ""
+    st.session_state["acceso_temporal"] = False
     st.rerun()
 
 # =========================================================
@@ -386,3 +433,53 @@ elif pagina == "📁 Secretaría":
             st.dataframe(pd.DataFrame(resp_exp.json()), use_container_width=True, hide_index=True)
         else:
             st.info("Aún no hay expedientes registrados.")
+
+# =========================================================
+# SECCIÓN 6: ACCESOS TEMPORALES (SOLO ADMIN)
+# =========================================================
+elif pagina == "🔐 Accesos Temporales":
+    st.title("🔐 Gestión de Claves Temporales")
+    st.caption("Genera códigos para que otros roles puedan acceder temporalmente a todos los módulos.")
+
+    with st.form("form_clave_temporal"):
+        duracion_map = {
+            "24 horas": "24h",
+            "48 horas": "48h",
+            "1 semana (7 días)": "7d",
+            "Indeterminado (hasta revocar)": "indeterminado"
+        }
+        seleccion_dur = st.selectbox("Duración de la clave", list(duracion_map.keys()))
+        if st.form_submit_button("Generar Nueva Clave"):
+            r = requests.post(
+                f"{API_URL}/api/v1/admin/claves-temporales",
+                json={"duracion": duracion_map[seleccion_dur]},
+                timeout=15
+            )
+            if r.status_code == 200:
+                data = r.json()
+                st.success(f"Clave generada: **{data['codigo']}** (Expira: {data['expira']})")
+                st.rerun()
+            else:
+                st.error(f"Error: {r.text}")
+
+    st.divider()
+    st.subheader("Claves Registradas")
+    resp_claves = requests.get(f"{API_URL}/api/v1/admin/claves-temporales", timeout=15)
+    if resp_claves.status_code == 200 and resp_claves.json():
+        claves = resp_claves.json()
+        st.dataframe(pd.DataFrame(claves), use_container_width=True, hide_index=True)
+
+        activas = [c for c in claves if c["Estado"] == "Activa"]
+        if activas:
+            opciones_rev = {f"{c['Código']} (Expira: {c['Expira (UTC)']})": c["ID"] for c in activas}
+            clave_rev = st.selectbox("Revocar una clave activa:", list(opciones_rev.keys()))
+            if st.button("🚫 Revocar Clave Seleccionada"):
+                r_rev = requests.put(
+                    f"{API_URL}/api/v1/admin/claves-temporales/{opciones_rev[clave_rev]}/revocar",
+                    timeout=15
+                )
+                if r_rev.status_code == 200:
+                    st.success("Clave revocada.")
+                    st.rerun()
+    else:
+        st.info("No hay claves temporales generadas aún.")

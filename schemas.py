@@ -33,3 +33,9 @@ class CatequizandoCreate(BaseModel):
     dni: str
     nombres: str
     apellidos: str
+
+class ClaveTemporalCreate(BaseModel):
+    duracion: str  # "24h", "48h", "7d", "indeterminado"
+
+class ClaveTemporalValidar(BaseModel):
+    codigo: str
