@@ -400,17 +400,14 @@ class LoginAdminRequest(BaseModel):
 
 @app.post("/api/v1/admin/login")
 def login_admin(datos: LoginAdminRequest, db: Session = Depends(get_db)):
-    # Buscamos al usuario por DNI y que esté activo
     usuario = db.query(models.Usuario).filter(
         models.Usuario.dni == datos.dni,
         models.Usuario.estado == True
     ).first()
 
-    # Roles permitidos: 1 (Administrador/Coordinador), 2 (Secretario), 3 (Tesorero)
-    if not usuario or usuario.id_rol not in [1, 2, 3]:
-        raise HTTPException(status_code=403, detail="Acceso denegado: solo personal administrativo.")
+    if not usuario:
+        raise HTTPException(status_code=403, detail="Usuario no encontrado o inactivo.")
 
-    # Verificación de contraseña (acepta texto plano de prueba y contraseñas encriptadas)
     es_valida = False
     if usuario.password_hash == datos.password:
         es_valida = True
@@ -423,11 +420,11 @@ def login_admin(datos: LoginAdminRequest, db: Session = Depends(get_db)):
     if not es_valida:
         raise HTTPException(status_code=401, detail="Contraseña incorrecta.")
 
-    roles_nombre = {1: "Coordinador/Admin", 2: "Secretario", 3: "Tesorero"}
+    nombre_rol = usuario.rol.nombre_rol if usuario.rol else "Administrador"
     return {
         "mensaje": "Acceso concedido",
         "usuario": usuario.nombres,
-        "rol": roles_nombre.get(usuario.id_rol, "Administrativo")
+        "rol": nombre_rol
     }
 
 @app.post("/api/v1/catequizandos", tags=["Gestión de Catequizandos"])
@@ -587,16 +584,34 @@ def crear_usuario(datos: schemas.UsuarioCreate, db: Session = Depends(get_db)):
     if existe:
         raise HTTPException(status_code=400, detail="Ya existe un usuario registrado con ese DNI.")
 
+    # Busca el rol en la tabla roles; si no existe (ej. Vocal), lo crea automáticamente
+    rol_obj = db.query(models.Rol).filter(
+        func.lower(models.Rol.nombre_rol) == datos.rol.strip().lower()
+    ).first()
+
+    if not rol_obj:
+        rol_obj = models.Rol(nombre_rol=datos.rol.strip(), nivel_acceso=2)
+        db.add(rol_obj)
+        db.commit()
+        db.refresh(rol_obj)
+
+    password_encriptada = security.obtener_hash_password(datos.password.strip())
+
     nuevo_usuario = models.Usuario(
+        id_rol=rol_obj.id_rol,
         dni=datos.dni.strip(),
-        nombre=datos.nombre.strip(),
-        password=datos.password.strip(),
-        rol=datos.rol.strip()
+        nombres=datos.nombre.strip(),
+        password_hash=password_encriptada,
+        estado=True
     )
     db.add(nuevo_usuario)
     db.commit()
     db.refresh(nuevo_usuario)
-    return {"mensaje": "Usuario creado exitosamente", "dni": nuevo_usuario.dni, "rol": nuevo_usuario.rol}
+    return {
+        "mensaje": "Usuario creado exitosamente",
+        "dni": nuevo_usuario.dni,
+        "rol": rol_obj.nombre_rol
+    }
 
 @app.get("/api/v1/admin/usuarios", tags=["Seguridad y Accesos"])
 def listar_usuarios(db: Session = Depends(get_db)):
@@ -605,8 +620,8 @@ def listar_usuarios(db: Session = Depends(get_db)):
         {
             "ID": u.id_usuario,
             "DNI": u.dni,
-            "Nombre": u.nombre,
-            "Rol": u.rol
+            "Nombre": u.nombres,
+            "Rol": u.rol.nombre_rol if u.rol else f"Rol {u.id_rol}"
         }
         for u in usuarios
     ]
