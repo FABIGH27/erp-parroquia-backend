@@ -701,3 +701,28 @@ def eliminar_pago(id_pago: int, db: Session = Depends(get_db)):
     db.delete(pago)
     db.commit()
     return {"mensaje": "Pago anulado y eliminado correctamente."}
+
+@app.delete("/api/v1/secretaria/expedientes/{id_exp}", tags=["Secretaría"])
+def eliminar_expediente(id_exp: int, db: Session = Depends(get_db)):
+    exp = db.query(models.Expediente).filter(models.Expediente.id_exp == id_exp).first()
+    if not exp:
+        raise HTTPException(status_code=404, detail="Registro de expediente no encontrado.")
+    db.delete(exp)
+    db.commit()
+    return {"mensaje": "Registro eliminado correctamente."}
+
+@app.delete("/api/v1/secretaria/documentos/{id_doc}", tags=["Secretaría"])
+def eliminar_documento_requisito(id_doc: int, db: Session = Depends(get_db)):
+    doc = db.query(models.DocumentoRequisito).filter(models.DocumentoRequisito.id_doc == id_doc).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento no encontrado.")
+    try:
+        db.delete(doc)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="No se puede eliminar porque ya hay catequizandos con este documento registrado."
+        )
+    return {"mensaje": "Documento eliminado del catálogo."}

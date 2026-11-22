@@ -743,6 +743,6 @@ elif pagina == "👤 Gestión de Usuarios":
                 st.success("Usuario eliminado.")
                 st.rerun()
             else:
-                st.error(f"No se pudo eliminar: {r_del.text}")
+                st.error(f"No se pudo eliminar ({r_del.status_code}): {r_del.text}")
     else:
         st.info("No hay usuarios registrados.")
