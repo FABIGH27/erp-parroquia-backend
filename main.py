@@ -127,7 +127,12 @@ def registrar_asistencia(request: schemas.AsistenciaQRRequest, db: Session = Dep
             detail="Código QR inválido o alumno no encontrado"
         )
 
-    nueva_asistencia = models.Asistencia(id_cateq=alumno.id_cateq, id_usuario=1)
+    nueva_asistencia = models.Asistencia(
+        id_cateq=alumno.id_cateq,
+        id_usuario=1,
+        tipo_asistencia=request.tipo_asistencia,
+        detalle_evento=request.detalle_evento
+    )
     db.add(nueva_asistencia)
     db.commit()
     db.refresh(nueva_asistencia)
@@ -426,13 +431,59 @@ def login_admin(datos: LoginAdminRequest, db: Session = Depends(get_db)):
 @app.get("/api/v1/catequizandos")
 def listar_catequizandos(db: Session = Depends(get_db)):
     jovenes = db.query(models.Catequizando).all()
-    return [
-        {
+    resultado = []
+    for j in jovenes:
+        cat = db.query(func.count(models.Asistencia.id_asis)).filter(
+            models.Asistencia.id_cateq == j.id_cateq,
+            models.Asistencia.tipo_asistencia == "Catequesis"
+        ).scalar() or 0
+        misas = db.query(func.count(models.Asistencia.id_asis)).filter(
+            models.Asistencia.id_cateq == j.id_cateq,
+            models.Asistencia.tipo_asistencia == "Misa"
+        ).scalar() or 0
+        acts = db.query(func.count(models.Asistencia.id_asis)).filter(
+            models.Asistencia.id_cateq == j.id_cateq,
+            models.Asistencia.tipo_asistencia == "Actividad Parroquial"
+        ).scalar() or 0
+
+        resultado.append({
             "ID": j.id_cateq,
             "DNI": j.dni,
             "Nombres": j.nombres,
             "Apellidos": j.apellidos,
-            "QR Token": j.qr_token
+            "QR Token": j.qr_token,
+            "Catequesis": cat,
+            "Misas": misas,
+            "Actividades": acts
+        })
+    return resultado
+
+@app.get("/api/v1/asistencias", tags=["Logística y Escáner QR"])
+def listar_asistencias(tipo: str | None = None, db: Session = Depends(get_db)):
+    query = (
+        db.query(
+            models.Asistencia.id_asis,
+            models.Catequizando.dni,
+            models.Catequizando.nombres,
+            models.Catequizando.apellidos,
+            models.Asistencia.tipo_asistencia,
+            models.Asistencia.detalle_evento,
+            models.Asistencia.fecha_hora
+        )
+        .join(models.Catequizando, models.Asistencia.id_cateq == models.Catequizando.id_cateq)
+    )
+    if tipo:
+        query = query.filter(models.Asistencia.tipo_asistencia == tipo)
+
+    registros = query.order_by(models.Asistencia.fecha_hora.desc()).all()
+    return [
+        {
+            "ID": r.id_asis,
+            "DNI": r.dni,
+            "Catequizando": f"{r.nombres} {r.apellidos}",
+            "Tipo": r.tipo_asistencia,
+            "Actividad": r.detalle_evento or "-",
+            "Fecha y Hora": r.fecha_hora
         }
-        for j in jovenes
+        for r in registros
     ]

@@ -4,6 +4,8 @@ from typing import Literal, Optional
 
 class AsistenciaQRRequest(BaseModel):
     qr_token: str
+    tipo_asistencia: str = "Catequesis"
+    detalle_evento: Optional[str] = None
 
 class ConceptoPagoCreate(BaseModel):
     nombre_conc: str = Field(..., max_length=100, example="Matrícula Catequesis 2026")

@@ -53,6 +53,9 @@ class Asistencia(Base):
     # Relación para facilitar consultas
     catequizando = relationship("Catequizando")
 
+    tipo_asistencia = Column(String(50), default="Catequesis", nullable=False)
+    detalle_evento = Column(String(100), nullable=True)
+
 class ConceptoPago(Base):
     __tablename__ = "conceptos_pago"
 
