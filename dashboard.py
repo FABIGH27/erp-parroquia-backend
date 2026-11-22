@@ -6,6 +6,13 @@ from io import BytesIO
 from datetime import datetime
 from fpdf import FPDF
 
+st.set_page_config(page_title="ERP Parroquia - Confirmación", layout="wide")
+
+API_URL = "https://erp-parroquia-api.onrender.com"
+
+# =========================================================
+# FUNCIONES DE EXPORTACIÓN (EXCEL Y PDF)
+# =========================================================
 def generar_excel(df: pd.DataFrame) -> bytes:
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
@@ -68,10 +75,6 @@ def mostrar_botones_exportacion(df: pd.DataFrame, nombre_base: str, titulo_pdf: 
             mime="application/pdf",
             key=f"pdf_{nombre_base}"
         )
-
-st.set_page_config(page_title="ERP Parroquia - Confirmación", layout="wide")
-
-API_URL = "https://erp-parroquia-api.onrender.com"
 
 # Estado de sesión global
 if "admin_logueado" not in st.session_state:
@@ -288,11 +291,15 @@ elif pagina == "👥 Directorio de Catequizandos":
                     file_name=f"QR_{alumno_sel['DNI']}_{alumno_sel['Apellidos']}.png",
                     mime="image/png"
                 )
+
             st.divider()
             with st.expander("✏️ Editar o Eliminar Catequizando"):
                 opciones_edit = {f"{j['Nombres']} {j['Apellidos']} (DNI: {j['DNI']})": j for j in lista}
-                sel_edit = st.selectbox("Selecciona el catequizando a modificar:", list(opciones_edit.keys()),
-                                        key="sel_edit_cat")
+                sel_edit = st.selectbox(
+                    "Selecciona el catequizando a modificar:",
+                    list(opciones_edit.keys()),
+                    key="sel_edit_cat"
+                )
                 cat_obj = opciones_edit[sel_edit]
 
                 with st.form("form_editar_catequizando"):
@@ -347,6 +354,7 @@ elif pagina == "📋 Control de Asistencias":
                 st.dataframe(df, use_container_width=True, hide_index=True)
                 nombre_slug = tipo_filtro.lower().replace(" ", "_")
                 mostrar_botones_exportacion(df, f"asistencias_{nombre_slug}", f"Asistencias - {tipo_filtro}")
+
                 with st.expander("🗑️ Eliminar asistencia duplicada o errónea"):
                     opciones_asis = {
                         f"ID {r['ID']} - {r['Catequizando']} ({r['Fecha y Hora']})": r["ID"]
@@ -467,16 +475,22 @@ elif pagina == "💰 Tesorería":
                 df_pagos = pd.DataFrame(lista_pagos)
                 st.dataframe(df_pagos, use_container_width=True, hide_index=True)
                 mostrar_botones_exportacion(df_pagos, "reporte_pagos", "Reporte de Tesoreria - Pagos")
+
                 with st.expander("🗑️ Anular / Eliminar un Pago"):
                     opciones_pagos = {
                         f"ID {p['id_pago']} - {p['alumno']} | {p['concepto']} (S/ {p['monto']})": p["id_pago"]
                         for p in lista_pagos
                     }
-                    pago_sel = st.selectbox("Selecciona el pago a anular:", list(opciones_pagos.keys()),
-                                            key="sel_del_pago")
+                    pago_sel = st.selectbox(
+                        "Selecciona el pago a anular:",
+                        list(opciones_pagos.keys()),
+                        key="sel_del_pago"
+                    )
                     if st.button("Anular Pago Seleccionado", key="btn_del_pago"):
-                        r_del = requests.delete(f"{API_URL}/api/v1/tesoreria/pagos/{opciones_pagos[pago_sel]}",
-                                                timeout=15)
+                        r_del = requests.delete(
+                            f"{API_URL}/api/v1/tesoreria/pagos/{opciones_pagos[pago_sel]}",
+                            timeout=15
+                        )
                         if r_del.status_code == 200:
                             st.success("Pago anulado correctamente.")
                             st.rerun()
@@ -523,6 +537,23 @@ elif pagina == "📁 Secretaría":
 
         if lista_docs:
             st.dataframe(pd.DataFrame(lista_docs), use_container_width=True, hide_index=True)
+            with st.expander("🗑️ Eliminar Documento del Catálogo"):
+                opciones_del_doc = {f"{d['nombre_doc']} (ID: {d['id_doc']})": d["id_doc"] for d in lista_docs}
+                doc_del_sel = st.selectbox(
+                    "Selecciona el documento a eliminar:",
+                    list(opciones_del_doc.keys()),
+                    key="sel_del_doc"
+                )
+                if st.button("Eliminar Documento", key="btn_del_doc"):
+                    r_del = requests.delete(
+                        f"{API_URL}/api/v1/secretaria/documentos/{opciones_del_doc[doc_del_sel]}",
+                        timeout=15
+                    )
+                    if r_del.status_code == 200:
+                        st.success("Documento eliminado del catálogo.")
+                        st.rerun()
+                    else:
+                        st.error(r_del.json().get("detail", "No se pudo eliminar."))
         else:
             st.info("Aún no hay documentos requisito registrados para este año.")
 
@@ -564,7 +595,10 @@ elif pagina == "📁 Secretaría":
         st.subheader("Consultar Expediente por Catequizando")
         if lista_jovenes:
             opciones_consulta = {f"{j['Nombres']} {j['Apellidos']} (DNI: {j['DNI']})": j["DNI"] for j in lista_jovenes}
-            alumno_consulta = st.selectbox("Selecciona un catequizando para ver sus documentos:", list(opciones_consulta.keys()))
+            alumno_consulta = st.selectbox(
+                "Selecciona un catequizando para ver sus documentos:",
+                list(opciones_consulta.keys())
+            )
             dni_consulta = opciones_consulta[alumno_consulta]
 
             resp_exp = requests.get(f"{API_URL}/api/v1/secretaria/expedientes/{dni_consulta}", timeout=15)
@@ -574,6 +608,28 @@ elif pagina == "📁 Secretaría":
                     df_exp = pd.DataFrame(docs_alumno)
                     st.dataframe(df_exp, use_container_width=True, hide_index=True)
                     mostrar_botones_exportacion(df_exp, f"expediente_{dni_consulta}", f"Expediente - {alumno_consulta}")
+
+                    with st.expander("🗑️ Eliminar Registro de Expediente"):
+                        opciones_del_exp = {
+                            f"ID {d['id_exp']} - {d['documento']} ({d['estado']})": d["id_exp"]
+                            for d in docs_alumno if "id_exp" in d
+                        }
+                        if opciones_del_exp:
+                            exp_del_sel = st.selectbox(
+                                "Selecciona el registro a eliminar:",
+                                list(opciones_del_exp.keys()),
+                                key="sel_del_exp"
+                            )
+                            if st.button("Eliminar Registro", key="btn_del_exp"):
+                                r_del = requests.delete(
+                                    f"{API_URL}/api/v1/secretaria/expedientes/{opciones_del_exp[exp_del_sel]}",
+                                    timeout=15
+                                )
+                                if r_del.status_code == 200:
+                                    st.success("Registro de expediente eliminado.")
+                                    st.rerun()
+                                else:
+                                    st.error("No se pudo eliminar el registro.")
                 else:
                     st.info("Este catequizando aún no tiene documentos registrados.")
             else:
