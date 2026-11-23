@@ -1244,7 +1244,7 @@ def crear_codigo_servicio(datos: schemas.CodigoServicioCreate, db: Session = Dep
     nuevo = models.CodigoServicio(
         codigo=codigo_gen,
         tipo_asistencia=datos.tipo_asistencia,
-        detalle_evento=datos.detalle_evento if datos.tipo_asistencia == "Actividad Parroquial" else None,
+        detalle_evento=datos.detalle_evento or None,
         hora_limite_tardanza=datos.hora_limite_tardanza or None,
         expira_en=expira,
         activo=True
