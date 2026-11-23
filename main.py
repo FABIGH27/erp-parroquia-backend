@@ -130,26 +130,25 @@ def registrar_asistencia(request: schemas.AsistenciaQRRequest, db: Session = Dep
             detail="Código QR inválido o alumno no encontrado"
         )
 
-    # Verificar si quien escanea tiene rol de Administrador
     usuario = db.query(models.Usuario).filter(models.Usuario.id_usuario == request.id_usuario).first()
     es_admin = False
     if usuario and usuario.rol:
         es_admin = usuario.rol.nombre_rol.strip().lower() in ["administrador", "admin"]
 
-    # Si NO es administrador, impedir duplicados el mismo día y evento
-    if not es_admin:
-        ya_registrado = db.query(models.Asistencia).filter(
-            models.Asistencia.id_cateq == alumno.id_cateq,
-            models.Asistencia.tipo_asistencia == request.tipo_asistencia,
-            models.Asistencia.detalle_evento == request.detalle_evento,
-            func.date(models.Asistencia.fecha_hora) == func.current_date()
-        ).first()
+    # Verificamos siempre si ya existe asistencia hoy para este evento
+    ya_registrado = db.query(models.Asistencia).filter(
+        models.Asistencia.id_cateq == alumno.id_cateq,
+        models.Asistencia.tipo_asistencia == request.tipo_asistencia,
+        models.Asistencia.detalle_evento == request.detalle_evento,
+        func.date(models.Asistencia.fecha_hora) == func.current_date()
+    ).first()
 
-        if ya_registrado:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"{alumno.nombres} {alumno.apellidos} ya registró asistencia hoy en {request.tipo_asistencia}."
-            )
+    # Si NO es administrador, bloqueamos el duplicado
+    if ya_registrado and not es_admin:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"{alumno.nombres} {alumno.apellidos} ya registró asistencia hoy en {request.tipo_asistencia}."
+        )
 
     nueva_asistencia = models.Asistencia(
         id_cateq=alumno.id_cateq,
@@ -165,7 +164,8 @@ def registrar_asistencia(request: schemas.AsistenciaQRRequest, db: Session = Dep
         "mensaje": "Asistencia registrada correctamente",
         "alumno": f"{alumno.nombres} {alumno.apellidos}",
         "dni": alumno.dni,
-        "hora_registro": nueva_asistencia.fecha_hora
+        "hora_registro": nueva_asistencia.fecha_hora,
+        "es_duplicado": ya_registrado is not None
     }
 
 
