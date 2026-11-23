@@ -98,6 +98,79 @@ def selector_con_buscador(etiqueta: str, opciones_dict: dict, key_prefix: str, p
     )
     return filtradas[seleccion]
 
+# =========================================================
+# FUNCIONES DE CARNETS QR (INDIVIDUAL Y EN BLOQUE A4)
+# =========================================================
+def _limpiar_texto_pdf(texto: str) -> str:
+    return str(texto).encode("latin-1", "replace").decode("latin-1")
+
+def _dibujar_carnet(pdf: FPDF, x: float, y: float, alumno: dict):
+    ancho, alto = 85, 54
+
+    # Borde guía de recorte
+    pdf.set_draw_color(160, 160, 160)
+    pdf.set_line_width(0.3)
+    pdf.rect(x, y, ancho, alto)
+
+    # Franja superior azul
+    pdf.set_fill_color(30, 58, 138)
+    pdf.rect(x, y, ancho, 11, style="F")
+
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font("Helvetica", "B", 8.5)
+    pdf.set_xy(x, y + 2.5)
+    pdf.cell(ancho, 6, _limpiar_texto_pdf("PARROQUIA - CONFIRMACION"), align="C")
+
+    # Generar imagen QR en memoria
+    img_qr = qrcode.make(alumno["QR Token"])
+    buf_qr = BytesIO()
+    img_qr.save(buf_qr, format="PNG")
+    buf_qr.seek(0)
+    pdf.image(buf_qr, x=x + 3, y=y + 14, w=34, h=34)
+
+    # Datos del catequizando a la derecha
+    pdf.set_text_color(20, 20, 20)
+    pdf.set_xy(x + 39, y + 16)
+    pdf.set_font("Helvetica", "B", 8)
+    pdf.multi_cell(43, 4.2, _limpiar_texto_pdf(alumno["Nombres"].upper()))
+
+    pdf.set_xy(x + 39, y + 26)
+    pdf.set_font("Helvetica", "", 8)
+    pdf.multi_cell(43, 4.2, _limpiar_texto_pdf(alumno["Apellidos"].upper()))
+
+    pdf.set_xy(x + 39, y + 38)
+    pdf.set_font("Helvetica", "B", 8.5)
+    pdf.cell(43, 5, f"DNI: {alumno['DNI']}")
+
+    pdf.set_xy(x + 39, y + 43)
+    pdf.set_font("Helvetica", "", 7)
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(43, 4, _limpiar_texto_pdf(alumno["QR Token"]))
+
+def generar_carnet_individual_pdf(alumno: dict) -> bytes:
+    pdf = FPDF(orientation="P", unit="mm", format=(85, 54))
+    pdf.set_auto_page_break(False)
+    pdf.add_page()
+    _dibujar_carnet(pdf, 0, 0, alumno)
+    return bytes(pdf.output())
+
+def generar_carnets_bloque_pdf(lista_alumnos: list) -> bytes:
+    pdf = FPDF(orientation="P", unit="mm", format="A4")
+    pdf.set_auto_page_break(False)
+
+    pos_x = [15, 110]               # 2 columnas centradas en A4 (210mm)
+    pos_y = [11, 67, 123, 179, 235] # 5 filas en A4 (297mm) = 10 carnets/hoja
+
+    for idx, alumno in enumerate(lista_alumnos):
+        pos_en_hoja = idx % 10
+        if pos_en_hoja == 0:
+            pdf.add_page()
+        col = pos_en_hoja % 2
+        fila = pos_en_hoja // 2
+        _dibujar_carnet(pdf, pos_x[col], pos_y[fila], alumno)
+
+    return bytes(pdf.output())
+
 # Estado de sesión global
 if "admin_logueado" not in st.session_state:
     st.session_state["admin_logueado"] = False
@@ -378,7 +451,7 @@ elif pagina == "👥 Directorio de Catequizandos":
             mostrar_botones_exportacion(df, "directorio_catequizandos", "Directorio de Catequizandos")
 
             st.divider()
-            st.subheader("🎫 Generar y Descargar Código QR")
+            st.subheader("🎫 Carnet QR Individual")
             opciones_qr = {f"{j['Nombres']} {j['Apellidos']} (DNI: {j['DNI']})": j for j in lista}
             alumno_sel = selector_con_buscador("Catequizando para QR", opciones_qr, "qr_cat")
 
@@ -390,16 +463,65 @@ elif pagina == "👥 Directorio de Catequizandos":
 
                 col_img, col_btn = st.columns([1, 2])
                 with col_img:
-                    st.image(bytes_qr, caption=alumno_sel["QR Token"], width=220)
+                    st.image(bytes_qr, caption=alumno_sel["QR Token"], width=200)
                 with col_btn:
                     st.write(f"**Catequizando:** {alumno_sel['Nombres']} {alumno_sel['Apellidos']}")
                     st.write(f"**DNI:** {alumno_sel['DNI']}")
-                    st.download_button(
-                        label="⬇️ Descargar QR en PNG",
-                        data=bytes_qr,
-                        file_name=f"QR_{alumno_sel['DNI']}_{alumno_sel['Apellidos']}.png",
-                        mime="image/png"
+                    b1, b2 = st.columns(2)
+                    with b1:
+                        st.download_button(
+                            label="🪪 Descargar Carnet PDF (Pequeño)",
+                            data=generar_carnet_individual_pdf(alumno_sel),
+                            file_name=f"Carnet_{alumno_sel['DNI']}_{alumno_sel['Apellidos']}.pdf",
+                            mime="application/pdf",
+                            key=f"pdf_carnet_{alumno_sel['DNI']}"
+                        )
+                    with b2:
+                        st.download_button(
+                            label="⬇️ Solo imagen QR (PNG)",
+                            data=bytes_qr,
+                            file_name=f"QR_{alumno_sel['DNI']}_{alumno_sel['Apellidos']}.png",
+                            mime="image/png",
+                            key=f"png_qr_{alumno_sel['DNI']}"
+                        )
+
+            st.divider()
+            with st.expander("🖨️ Impresión de Carnets QR en Bloque (Hoja A4 - 10 por página)"):
+                modo_bloque = st.radio(
+                    "¿Qué carnets deseas generar?",
+                    ["Todos los catequizandos filtrados en la tabla superior", "Seleccionar catequizandos específicos"],
+                    horizontal=True,
+                    key="modo_bloque_qr"
+                )
+
+                alumnos_a_imprimir = []
+                if modo_bloque == "Todos los catequizandos filtrados en la tabla superior":
+                    dnis_filtrados = set(df["DNI"].tolist())
+                    alumnos_a_imprimir = [j for j in lista if j["DNI"] in dnis_filtrados]
+                else:
+                    opciones_multi = {f"{j['Nombres']} {j['Apellidos']} (DNI: {j['DNI']})": j for j in lista}
+                    seleccionados = st.multiselect(
+                        "Elige los catequizandos (puedes escribir para buscar):",
+                        list(opciones_multi.keys()),
+                        key="multi_qr_bloque"
                     )
+                    alumnos_a_imprimir = [opciones_multi[s] for s in seleccionados]
+
+                if alumnos_a_imprimir:
+                    st.caption(
+                        f"Se generarán **{len(alumnos_a_imprimir)}** carnets ({(len(alumnos_a_imprimir) + 9) // 10} hoja(s) A4).")
+                    if st.button("⚙️ Preparar PDF en Bloque", key="btn_prep_bloque"):
+                        with st.spinner("Generando carnets..."):
+                            pdf_bloque = generar_carnets_bloque_pdf(alumnos_a_imprimir)
+                        st.download_button(
+                            label="📄 Descargar PDF de Carnets A4",
+                            data=pdf_bloque,
+                            file_name=f"Carnets_QR_Bloque_{datetime.now().strftime('%Y%m%d')}.pdf",
+                            mime="application/pdf",
+                            key="btn_dl_bloque"
+                        )
+                else:
+                    st.info("Selecciona al menos un catequizando para generar el PDF.")
 
             st.divider()
             with st.expander("✏️ Editar o Eliminar Catequizando"):
