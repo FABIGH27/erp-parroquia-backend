@@ -658,6 +658,7 @@ def listar_asistencias(tipo: str | None = None, db: Session = Depends(get_db)):
             models.Catequizando.dni,
             models.Catequizando.nombres,
             models.Catequizando.apellidos,
+            models.Catequizando.colegio,
             models.Asistencia.tipo_asistencia,
             models.Asistencia.detalle_evento,
             models.Asistencia.estado,
