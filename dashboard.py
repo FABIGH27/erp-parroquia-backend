@@ -22,6 +22,20 @@ COLEGIOS_PARROQUIA = [
 
 ESTADOS_BAUTISMO = ["Bautizado", "Por bautizar"]
 
+TEMAS_CATEQUESIS = [f"Tema {i}" for i in range(1, 27)]
+MISAS_ANUALES = [f"Misa {i}" for i in range(1, 31)]
+ACTIVIDADES_PARROQUIALES = [
+    "Bienvenida",
+    "Corpus Christi",
+    "Pollada",
+    "Marcha por la Paz",
+    "San Francisco de Asis",
+    "Retiro Espiritual",
+    "Confesión",
+    "Ensayo de Ceremonia",
+    "Ceremonia",
+]
+
 # =========================================================
 # FUNCIONES DE EXPORTACIÓN (EXCEL Y PDF) Y BUSCADOR
 # =========================================================
@@ -656,9 +670,9 @@ elif pagina == "👥 Directorio de Catequizandos":
 elif pagina == "📋 Control de Asistencias":
     st.title("📋 Control de Asistencias")
 
-    tab1, tab2, tab3 = st.tabs(["📖 Catequesis", "⛪ Misas", "🎉 Actividades Parroquiales"])
+    tab1, tab2, tab3 = st.tabs(["📖 Catequesis (26 Temas)", "⛪ Misas (30 Misas)", "🎉 Actividades Parroquiales"])
 
-    def mostrar_tabla_asistencias(tipo_filtro, mostrar_actividad=False):
+    def mostrar_tabla_asistencias(tipo_filtro, etiqueta_detalle, opciones_detalle):
         resp = requests.get(
             f"{API_URL}/api/v1/asistencias",
             params={"tipo": tipo_filtro},
@@ -669,22 +683,46 @@ elif pagina == "📋 Control de Asistencias":
             if registros:
                 nombre_slug = tipo_filtro.lower().replace(" ", "_")
                 df = pd.DataFrame(registros)
-                if not mostrar_actividad and "Actividad" in df.columns:
-                    df = df.drop(columns=["Actividad"])
 
-                busq_asis = st.text_input(
-                    "🔍 Buscar asistencia por DNI, nombre, fecha o actividad:",
+                # Renombrar columna 'Actividad' a 'Tema', 'Misa' o 'Actividad'
+                if "Actividad" in df.columns:
+                    df = df.rename(columns={"Actividad": etiqueta_detalle})
+
+                # Filtros en fila: Buscador + Tema/Misa/Actividad + Colegio
+                f1, f2, f3 = st.columns([2, 1.2, 1.2])
+                busq_asis = f1.text_input(
+                    "🔍 Buscar por DNI, nombre o fecha:",
                     key=f"busq_tabla_asis_{nombre_slug}"
                 )
-                if busq_asis:
-                    df = df[df.apply(lambda row: busq_asis.lower() in row.astype(str).str.lower().to_string(), axis=1)]
+                filtro_det = f2.selectbox(
+                    f"Filtrar por {etiqueta_detalle}:",
+                    ["Todos"] + opciones_detalle,
+                    key=f"filt_det_{nombre_slug}"
+                )
+                filtro_col = f3.selectbox(
+                    "Filtrar por Colegio:",
+                    ["Todos"] + COLEGIOS_PARROQUIA,
+                    key=f"filt_col_{nombre_slug}"
+                )
 
-                st.dataframe(df, use_container_width=True, hide_index=True)
-                mostrar_botones_exportacion(df, f"asistencias_{nombre_slug}", f"Asistencias - {tipo_filtro}")
+                df_filtrado = df.copy()
+                if busq_asis.strip():
+                    q = busq_asis.strip().lower()
+                    df_filtrado = df_filtrado[
+                        df_filtrado.apply(lambda row: q in row.astype(str).str.lower().to_string(), axis=1)
+                    ]
+                if filtro_det != "Todos" and etiqueta_detalle in df_filtrado.columns:
+                    df_filtrado = df_filtrado[df_filtrado[etiqueta_detalle] == filtro_det]
+                if filtro_col != "Todos" and "Colegio" in df_filtrado.columns:
+                    df_filtrado = df_filtrado[df_filtrado["Colegio"] == filtro_col]
+
+                st.caption(f"Mostrando **{len(df_filtrado)}** de **{len(df)}** asistencias.")
+                st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
+                mostrar_botones_exportacion(df_filtrado, f"asistencias_{nombre_slug}", f"Asistencias - {tipo_filtro}")
 
                 with st.expander("🗑️ Eliminar asistencia duplicada o errónea"):
                     opciones_asis = {
-                        f"ID {r['ID']} - {r['Catequizando']} (DNI: {r['DNI']}) | {r['Fecha y Hora']}": r["ID"]
+                        f"ID {r['ID']} - {r['Catequizando']} (DNI: {r['DNI']}) | {r.get('Actividad', '-')} | {r['Fecha y Hora']}": r["ID"]
                         for r in registros
                     }
                     id_asis_sel = selector_con_buscador(
@@ -706,11 +744,11 @@ elif pagina == "📋 Control de Asistencias":
             st.error("Error al consultar las asistencias.")
 
     with tab1:
-        mostrar_tabla_asistencias("Catequesis")
+        mostrar_tabla_asistencias("Catequesis", "Tema", TEMAS_CATEQUESIS)
     with tab2:
-        mostrar_tabla_asistencias("Misa")
+        mostrar_tabla_asistencias("Misa", "Misa", MISAS_ANUALES)
     with tab3:
-        mostrar_tabla_asistencias("Actividad Parroquial", mostrar_actividad=True)
+        mostrar_tabla_asistencias("Actividad Parroquial", "Actividad", ACTIVIDADES_PARROQUIALES)
 
 # =========================================================
 # SECCIÓN 4: TESORERÍA
@@ -995,10 +1033,12 @@ elif pagina == "🔐 Accesos Temporales":
             key="srv_tipo"
         )
         detalle_srv = None
-        if tipo_srv == "Actividad Parroquial":
-            detalle_srv = c2.selectbox("Actividad específica", ACTIVIDADES_PARROQUIALES, key="srv_detalle")
+        if tipo_srv == "Catequesis":
+            detalle_srv = c2.selectbox("Número de Tema", TEMAS_CATEQUESIS, key="srv_detalle_tema")
+        elif tipo_srv == "Misa":
+            detalle_srv = c2.selectbox("Número de Misa", MISAS_ANUALES, key="srv_detalle_misa")
         else:
-            c2.text_input("Actividad específica", value="No aplica", disabled=True, key="srv_detalle_dis")
+            detalle_srv = c2.selectbox("Actividad específica", ACTIVIDADES_PARROQUIALES, key="srv_detalle_act")
 
         c3, c4, c5 = st.columns([1, 1, 1])
         duracion_srv = c3.selectbox("Duración del turno", [1, 2, 3, 4], index=3, format_func=lambda h: f"{h} hora(s)", key="srv_dur")
