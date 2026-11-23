@@ -1249,10 +1249,16 @@ def login_movil_con_codigo(req: schemas.LoginMovilRequest, db: Session = Depends
 
     # Verificación de contraseña (compatible con hash bcrypt o texto plano)
     pass_ok = False
-    try:
-        pass_ok = pwd_context.verify(req.password, usuario.password_hash)
-    except Exception:
-        pass_ok = (usuario.password_hash == req.password)
+    if usuario.password_hash == req.password:
+        pass_ok = True
+    else:
+        try:
+            pass_ok = security.verificar_password(req.password, usuario.password_hash)
+        except Exception:
+            pass_ok = False
+
+    if not pass_ok:
+        raise HTTPException(status_code=401, detail="Contraseña incorrecta.")
 
     if not pass_ok:
         raise HTTPException(status_code=401, detail="Contraseña incorrecta.")
