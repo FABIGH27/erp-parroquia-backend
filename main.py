@@ -36,6 +36,8 @@ with engine.connect() as conn:
         "ALTER TABLE catequizandos ADD COLUMN celular_apoderado_2 VARCHAR(20) NULL",
         "ALTER TABLE catequizandos ADD COLUMN parentesco_apoderado_2 VARCHAR(40) NULL",
         "ALTER TABLE codigos_servicio ADD COLUMN colegio_permitido VARCHAR(60) DEFAULT 'Todos'",
+        "ALTER TABLE catequizandos ADD COLUMN grupo VARCHAR(20) NULL",
+        "ALTER TABLE catequizandos ADD COLUMN salon VARCHAR(20) NULL",
     ]
     for sql in nuevas_cols:
         try:
@@ -645,6 +647,8 @@ def listar_catequizandos(db: Session = Depends(get_db)):
             "Apellidos": j.apellidos,
             "QR Token": j.qr_token,
             "Colegio": j.colegio or "Sin asignar",
+            "Grupo": j.grupo or "Sin asignar",
+            "Salón": j.salon or "Sin asignar",
             "Bautismo": j.estado_bautismo or "Bautizado",
             "Celular Joven": j.celular_joven or "-",
             "Apoderado 1": f"{j.celular_apoderado_1} ({j.parentesco_apoderado_1 or 'Apoderado'})" if j.celular_apoderado_1 else "-",
@@ -1522,6 +1526,8 @@ def obtener_ficha_completa(id_cateq: int, db: Session = Depends(get_db)):
             "Apellidos": alumno.apellidos,
             "QR Token": alumno.qr_token,
             "Colegio": alumno.colegio or "Sin asignar",
+            "Grupo": alumno.grupo or "Sin asignar",
+            "Salón": alumno.salon or "Sin asignar",
             "Bautismo": alumno.estado_bautismo or "Bautizado",
             "Celular Joven": alumno.celular_joven or "-",
             "Apoderado 1": f"{alumno.celular_apoderado_1} ({alumno.parentesco_apoderado_1 or 'Apoderado'})" if alumno.celular_apoderado_1 else "-",
@@ -1534,3 +1540,22 @@ def obtener_ficha_completa(id_cateq: int, db: Session = Depends(get_db)):
         },
         "documentos": documentos_lista
     }
+
+@app.put("/api/v1/admin/catequizandos/asignar-masivo", tags=["Gestión de Catequizandos"])
+def asignar_grupos_y_salones_masivo(
+    items: List[schemas.AsignacionMasivaItem],
+    db: Session = Depends(get_db)
+):
+    actualizados = 0
+    for item in items:
+        alumno = db.query(models.Catequizando).filter(
+            models.Catequizando.id_cateq == item.id_cateq
+        ).first()
+        if alumno:
+            if item.grupo is not None:
+                alumno.grupo = item.grupo if item.grupo != "Sin asignar" else None
+            if item.salon is not None:
+                alumno.salon = item.salon if item.salon != "Sin asignar" else None
+            actualizados += 1
+    db.commit()
+    return {"mensaje": f"Se actualizaron {actualizados} catequizandos correctamente.", "actualizados": actualizados}

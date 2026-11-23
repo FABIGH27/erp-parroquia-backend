@@ -46,6 +46,8 @@ class CatequizandoCreate(BaseModel):
     parentesco_apoderado_1: Optional[str] = None
     celular_apoderado_2: Optional[str] = None
     parentesco_apoderado_2: Optional[str] = None
+    grupo: Optional[str] = None
+    salon: Optional[str] = None
 
 class ClaveTemporalCreate(BaseModel):
     duracion: str  # "24h", "48h", "7d", "indeterminado"
@@ -70,6 +72,8 @@ class CatequizandoUpdate(BaseModel):
     parentesco_apoderado_1: Optional[str] = None
     celular_apoderado_2: Optional[str] = None
     parentesco_apoderado_2: Optional[str] = None
+    grupo: Optional[str] = None
+    salon: Optional[str] = None
 
 class CodigoServicioCreate(BaseModel):
     tipo_asistencia: str
@@ -82,3 +86,8 @@ class LoginMovilRequest(BaseModel):
     dni: str
     password: str
     codigo_servicio: Optional[str] = None
+
+class AsignacionMasivaItem(BaseModel):
+    id_cateq: int
+    grupo: Optional[str] = None
+    salon: Optional[str] = None

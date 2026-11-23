@@ -44,6 +44,8 @@ class Catequizando(Base):
     parentesco_apoderado_1 = Column(String(40), nullable=True)  # Ej: Mamá, Papá, Tía...
     celular_apoderado_2 = Column(String(20), nullable=True)
     parentesco_apoderado_2 = Column(String(40), nullable=True)
+    grupo = Column(String(20), nullable=True)  # Ej: "Grupo A", "Grupo B", "Grupo C", "Grupo D"
+    salon = Column(String(20), nullable=True)  # Ej: "Salón 1", "Salón 2", "Salón 3", "Salón 4"
 
 
 class Asistencia(Base):
