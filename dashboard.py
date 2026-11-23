@@ -36,7 +36,7 @@ ACTIVIDADES_PARROQUIALES = [
     "Ceremonia",
 ]
 
-GRUPOS_OPCIONES = ["Sin asignar", "Grupo A", "Grupo B", "Grupo C", "Grupo D"]
+GRUPOS_OPCIONES = ["Sin asignar","Grupo Único", "Grupo A", "Grupo B", "Grupo C", "Grupo D"]
 SALONES_OPCIONES = ["Sin asignar", "Salón 1", "Salón 2", "Salón 3", "Salón 4"]
 LETRAS_AZ = list("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
@@ -1202,7 +1202,7 @@ elif pagina == "🏫 Grupos y Salones":
 
                 es_grupo = tipo_asig.startswith("Grupo")
                 lista_etiquetas = (
-                    ["Grupo A", "Grupo B", "Grupo C", "Grupo D"]
+                    ["Grupo A", "Grupo B", "Grupo C", "Grupo D", "Grupo Único"]
                     if es_grupo
                     else ["Salón 1", "Salón 2", "Salón 3", "Salón 4"]
                 )
@@ -1222,7 +1222,7 @@ elif pagina == "🏫 Grupos y Salones":
                     etiq = r1.selectbox(
                         "Grupo" if es_grupo else "Salón",
                         lista_etiquetas,
-                        index=idx,
+                        index=4 if (es_grupo and cant_bloques == 1) else idx,
                         key=f"az_etiq_{es_grupo}_{cant_bloques}_{idx}"
                     )
                     ini_def, fin_def = cortes_default[idx]
