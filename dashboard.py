@@ -870,54 +870,148 @@ elif pagina == "📁 Secretaría":
                     st.error("No se pudo consultar el expediente.")
 
 # =========================================================
-# SECCIÓN 6: ACCESOS TEMPORALES (SOLO ADMIN)
+# SECCIÓN 6: ACCESOS TEMPORALES Y CÓDIGOS APK (SOLO ADMIN)
 # =========================================================
 elif pagina == "🔐 Accesos Temporales":
-    st.title("🔐 Gestión de Claves Temporales")
-    st.caption("Genera códigos para que otros roles puedan acceder temporalmente a todos los módulos.")
+    st.title("🔐 Accesos Temporales y Turnos APK")
 
-    with st.form("form_clave_temporal"):
-        duracion_map = {
-            "24 horas": "24h",
-            "48 horas": "48h",
-            "1 semana (7 días)": "7d",
-            "Indeterminado (hasta revocar)": "indeterminado"
-        }
-        seleccion_dur = st.selectbox("Duración de la clave", list(duracion_map.keys()))
-        if st.form_submit_button("Generar Nueva Clave"):
-            r = requests.post(
-                f"{API_URL}/api/v1/admin/claves-temporales",
-                json={"duracion": duracion_map[seleccion_dur]},
+    tab_apk, tab_web = st.tabs([
+        "📱 Códigos de Servicio APK (Máx. 4h)",
+        "🌐 Claves Temporales Web"
+    ])
+
+    # --- PESTAÑA 1: CÓDIGOS DE SERVICIO PARA LA APK ---
+    with tab_apk:
+        st.subheader("Generar Código de Servicio para Catequistas / Vocales")
+        st.caption("El código amarra la APK al evento elegido y cierra la sesión automáticamente al vencer (máx. 4 horas).")
+
+        ACTIVIDADES_PARROQUIALES = [
+            "Bienvenida",
+            "Corpus Christi",
+            "Pollada",
+            "Marcha por la Paz",
+            "San Francisco de Asis",
+            "Retiro Espiritual",
+            "Confesión",
+            "Ensayo de Ceremonia",
+            "Ceremonia"
+        ]
+
+        c1, c2 = st.columns(2)
+        tipo_srv = c1.selectbox(
+            "Evento del turno",
+            ["Catequesis", "Misa", "Actividad Parroquial"],
+            key="srv_tipo"
+        )
+        detalle_srv = None
+        if tipo_srv == "Actividad Parroquial":
+            detalle_srv = c2.selectbox("Actividad específica", ACTIVIDADES_PARROQUIALES, key="srv_detalle")
+        else:
+            c2.text_input("Actividad específica", value="No aplica", disabled=True, key="srv_detalle_dis")
+
+        c3, c4, c5 = st.columns([1, 1, 1])
+        duracion_srv = c3.selectbox("Duración del turno", [1, 2, 3, 4], index=3, format_func=lambda h: f"{h} hora(s)", key="srv_dur")
+        usar_tardanza = c4.checkbox("Activar límite de tardanza", value=False, key="srv_chk_tard")
+        hora_limite_str = None
+        if usar_tardanza:
+            hora_lim = c5.time_input("Tardanza a partir de (Hora Perú):", key="srv_hora_lim")
+            hora_limite_str = hora_lim.strftime("%H:%M")
+
+        if st.button("🔑 Generar Código de Servicio APK", type="primary", key="btn_gen_srv"):
+            r_srv = requests.post(
+                f"{API_URL}/api/v1/admin/codigos-servicio",
+                json={
+                    "tipo_asistencia": tipo_srv,
+                    "detalle_evento": detalle_srv,
+                    "duracion_horas": duracion_srv,
+                    "hora_limite_tardanza": hora_limite_str
+                },
                 timeout=15
             )
-            if r.status_code == 200:
-                data = r.json()
-                st.success(f"Clave generada: **{data['codigo']}** (Expira: {data['expira']})")
+            if r_srv.status_code == 200:
+                d = r_srv.json()
+                st.success(
+                    f"Código generado: **{d['codigo']}** | Evento: **{d['evento']}** | "
+                    f"Tardanza desde: **{d['hora_limite_tardanza']}** | Expira (Perú): **{d['expira_peru']}**"
+                )
                 st.rerun()
             else:
-                st.error(f"Error: {r.text}")
+                st.error(f"Error ({r_srv.status_code}): {r_srv.text}")
 
-    st.divider()
-    st.subheader("Claves Registradas")
-    resp_claves = requests.get(f"{API_URL}/api/v1/admin/claves-temporales", timeout=15)
-    if resp_claves.status_code == 200 and resp_claves.json():
-        claves = resp_claves.json()
-        st.dataframe(pd.DataFrame(claves), use_container_width=True, hide_index=True)
+        st.divider()
+        st.subheader("Códigos de Servicio Recientes")
+        resp_srv = requests.get(f"{API_URL}/api/v1/admin/codigos-servicio", timeout=15)
+        if resp_srv.status_code == 200 and resp_srv.json():
+            lista_srv = resp_srv.json()
+            st.dataframe(pd.DataFrame(lista_srv), use_container_width=True, hide_index=True)
 
-        activas = [c for c in claves if c["Estado"] == "Activa"]
-        if activas:
-            opciones_rev = {f"{c['Código']} (Expira: {c['Expira (UTC)']})": c["ID"] for c in activas}
-            clave_rev = st.selectbox("Revocar una clave activa:", list(opciones_rev.keys()))
-            if st.button("🚫 Revocar Clave Seleccionada"):
-                r_rev = requests.put(
-                    f"{API_URL}/api/v1/admin/claves-temporales/{opciones_rev[clave_rev]}/revocar",
+            activos_srv = [c for c in lista_srv if c["Estado"] == "Activo"]
+            if activos_srv:
+                opciones_rev_srv = {
+                    f"{c['Código']} - {c['Evento']} (Expira: {c['Expira (Perú)']})": c["ID"]
+                    for c in activos_srv
+                }
+                srv_rev = st.selectbox("Revocar un código activo en vivo:", list(opciones_rev_srv.keys()), key="sel_rev_srv")
+                if st.button("🚫 Revocar Código APK Ahora", key="btn_rev_srv"):
+                    r_rev = requests.put(
+                        f"{API_URL}/api/v1/admin/codigos-servicio/{opciones_rev_srv[srv_rev]}/revocar",
+                        timeout=15
+                    )
+                    if r_rev.status_code == 200:
+                        st.success("Código revocado. Cualquier celular usándolo será expulsado al intentar escanear.")
+                        st.rerun()
+                    else:
+                        st.error("No se pudo revocar el código.")
+        else:
+            st.info("Aún no hay códigos de servicio generados.")
+
+    # --- PESTAÑA 2: CLAVES TEMPORALES PARA EL DASHBOARD WEB ---
+    with tab_web:
+        st.subheader("Claves Temporales del Dashboard Web")
+        st.caption("Genera códigos para que otros roles puedan acceder temporalmente a todos los módulos web.")
+
+        with st.form("form_clave_temporal"):
+            duracion_map = {
+                "24 horas": "24h",
+                "48 horas": "48h",
+                "1 semana (7 días)": "7d",
+                "Indeterminado (hasta revocar)": "indeterminado"
+            }
+            seleccion_dur = st.selectbox("Duración de la clave", list(duracion_map.keys()))
+            if st.form_submit_button("Generar Nueva Clave"):
+                r = requests.post(
+                    f"{API_URL}/api/v1/admin/claves-temporales",
+                    json={"duracion": duracion_map[seleccion_dur]},
                     timeout=15
                 )
-                if r_rev.status_code == 200:
-                    st.success("Clave revocada.")
+                if r.status_code == 200:
+                    data = r.json()
+                    st.success(f"Clave generada: **{data['codigo']}** (Expira: {data['expira']})")
                     st.rerun()
-    else:
-        st.info("No hay claves temporales generadas aún.")
+                else:
+                    st.error(f"Error: {r.text}")
+
+        st.divider()
+        st.subheader("Claves Registradas")
+        resp_claves = requests.get(f"{API_URL}/api/v1/admin/claves-temporales", timeout=15)
+        if resp_claves.status_code == 200 and resp_claves.json():
+            claves = resp_claves.json()
+            st.dataframe(pd.DataFrame(claves), use_container_width=True, hide_index=True)
+
+            activas = [c for c in claves if c["Estado"] == "Activa"]
+            if activas:
+                opciones_rev = {f"{c['Código']} (Expira: {c['Expira (UTC)']})": c["ID"] for c in activas}
+                clave_rev = st.selectbox("Revocar una clave activa:", list(opciones_rev.keys()))
+                if st.button("🚫 Revocar Clave Seleccionada"):
+                    r_rev = requests.put(
+                        f"{API_URL}/api/v1/admin/claves-temporales/{opciones_rev[clave_rev]}/revocar",
+                        timeout=15
+                    )
+                    if r_rev.status_code == 200:
+                        st.success("Clave revocada.")
+                        st.rerun()
+        else:
+            st.info("No hay claves temporales generadas aún.")
 
 # =========================================================
 # SECCIÓN 7: GESTIÓN DE USUARIOS (SOLO ADMIN)
