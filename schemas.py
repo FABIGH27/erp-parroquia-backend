@@ -39,6 +39,13 @@ class CatequizandoCreate(BaseModel):
     dni: str
     nombres: str
     apellidos: str
+    colegio: Optional[str] = "Particulares"
+    estado_bautismo: Optional[str] = "Bautizado"
+    celular_joven: Optional[str] = None
+    celular_apoderado_1: Optional[str] = None
+    parentesco_apoderado_1: Optional[str] = None
+    celular_apoderado_2: Optional[str] = None
+    parentesco_apoderado_2: Optional[str] = None
 
 class ClaveTemporalCreate(BaseModel):
     duracion: str  # "24h", "48h", "7d", "indeterminado"
@@ -56,6 +63,13 @@ class CatequizandoUpdate(BaseModel):
     dni: str
     nombres: str
     apellidos: str
+    colegio: Optional[str] = "Particulares"
+    estado_bautismo: Optional[str] = "Bautizado"
+    celular_joven: Optional[str] = None
+    celular_apoderado_1: Optional[str] = None
+    parentesco_apoderado_1: Optional[str] = None
+    celular_apoderado_2: Optional[str] = None
+    parentesco_apoderado_2: Optional[str] = None
 
 class CodigoServicioCreate(BaseModel):
     tipo_asistencia: str

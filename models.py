@@ -37,6 +37,13 @@ class Catequizando(Base):
     nombres = Column(String(100), nullable=False)
     apellidos = Column(String(100), nullable=False)
     qr_token = Column(String(64), unique=True, index=True)
+    colegio = Column(String(60), nullable=True)  # Mercedes, Politécnico, etc.
+    estado_bautismo = Column(String(30), default="Bautizado")  # "Bautizado" o "Por bautizar"
+    celular_joven = Column(String(20), nullable=True)
+    celular_apoderado_1 = Column(String(20), nullable=True)
+    parentesco_apoderado_1 = Column(String(40), nullable=True)  # Ej: Mamá, Papá, Tía...
+    celular_apoderado_2 = Column(String(20), nullable=True)
+    parentesco_apoderado_2 = Column(String(40), nullable=True)
 
 
 class Asistencia(Base):

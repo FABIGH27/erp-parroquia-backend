@@ -26,6 +26,23 @@ with engine.connect() as conn:
     except Exception:
         pass
 
+with engine.connect() as conn:
+    nuevas_cols = [
+        "ALTER TABLE catequizandos ADD COLUMN colegio VARCHAR(60) NULL",
+        "ALTER TABLE catequizandos ADD COLUMN estado_bautismo VARCHAR(30) DEFAULT 'Bautizado'",
+        "ALTER TABLE catequizandos ADD COLUMN celular_joven VARCHAR(20) NULL",
+        "ALTER TABLE catequizandos ADD COLUMN celular_apoderado_1 VARCHAR(20) NULL",
+        "ALTER TABLE catequizandos ADD COLUMN parentesco_apoderado_1 VARCHAR(40) NULL",
+        "ALTER TABLE catequizandos ADD COLUMN celular_apoderado_2 VARCHAR(20) NULL",
+        "ALTER TABLE catequizandos ADD COLUMN parentesco_apoderado_2 VARCHAR(40) NULL",
+    ]
+    for sql in nuevas_cols:
+        try:
+            conn.execute(text(sql))
+            conn.commit()
+        except Exception:
+            pass
+
 app = FastAPI(
     title="API ERP Parroquia - Confirmación",
     description="Backend centralizado para gestión logística y financiera",
@@ -571,7 +588,14 @@ def crear_catequizando(datos: schemas.CatequizandoCreate, db: Session = Depends(
         dni=datos.dni.strip(),
         nombres=datos.nombres.strip(),
         apellidos=datos.apellidos.strip(),
-        qr_token=qr_generado
+        qr_token=qr_gen,
+        colegio=datos.colegio,
+        estado_bautismo=datos.estado_bautismo or "Bautizado",
+        celular_joven=datos.celular_joven,
+        celular_apoderado_1=datos.celular_apoderado_1,
+        parentesco_apoderado_1=datos.parentesco_apoderado_1,
+        celular_apoderado_2=datos.celular_apoderado_2,
+        parentesco_apoderado_2=datos.parentesco_apoderado_2,
     )
     db.add(nuevo)
     db.commit()
@@ -607,9 +631,19 @@ def listar_catequizandos(db: Session = Depends(get_db)):
             "Nombres": j.nombres,
             "Apellidos": j.apellidos,
             "QR Token": j.qr_token,
+            "Colegio": j.colegio or "Sin asignar",
+            "Bautismo": j.estado_bautismo or "Bautizado",
+            "Celular Joven": j.celular_joven or "-",
+            "Apoderado 1": f"{j.celular_apoderado_1} ({j.parentesco_apoderado_1 or 'Apoderado'})" if j.celular_apoderado_1 else "-",
+            "Apoderado 2": f"{j.celular_apoderado_2} ({j.parentesco_apoderado_2 or 'Apoderado'})" if j.celular_apoderado_2 else "-",
             "Catequesis": cat,
             "Misas": misas,
-            "Actividades": acts
+            "Actividades": acts,
+            "celular_joven_raw": j.celular_joven or "",
+            "celular_apoderado_1_raw": j.celular_apoderado_1 or "",
+            "parentesco_apoderado_1_raw": j.parentesco_apoderado_1 or "",
+            "celular_apoderado_2_raw": j.celular_apoderado_2 or "",
+            "parentesco_apoderado_2_raw": j.parentesco_apoderado_2 or "",
         })
     return resultado
 
@@ -797,11 +831,17 @@ def editar_catequizando(id_cateq: int, datos: schemas.CatequizandoUpdate, db: Se
     alumno.nombres = datos.nombres.strip()
     alumno.apellidos = datos.apellidos.strip()
     alumno.qr_token = f"CAT-{dni_limpio}"
+    alumno.colegio = datos.colegio
+    alumno.estado_bautismo = datos.estado_bautismo or "Bautizado"
+    alumno.celular_joven = datos.celular_joven
+    alumno.celular_apoderado_1 = datos.celular_apoderado_1
+    alumno.parentesco_apoderado_1 = datos.parentesco_apoderado_1
+    alumno.celular_apoderado_2 = datos.celular_apoderado_2
+    alumno.parentesco_apoderado_2 = datos.parentesco_apoderado_2
 
     db.commit()
     db.refresh(alumno)
     return {"mensaje": "Catequizando actualizado correctamente", "qr_token": alumno.qr_token}
-
 
 @app.delete("/api/v1/catequizandos/{id_cateq}", tags=["Gestión de Catequizandos"])
 def eliminar_catequizando(id_cateq: int, db: Session = Depends(get_db)):
