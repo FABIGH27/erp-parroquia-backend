@@ -1040,6 +1040,12 @@ elif pagina == "🔐 Accesos Temporales":
         else:
             detalle_srv = c2.selectbox("Actividad específica", ACTIVIDADES_PARROQUIALES, key="srv_detalle_act")
 
+        colegio_srv = st.selectbox(
+            "Colegio permitido para este código",
+            ["Todos"] + COLEGIOS_PARROQUIA,
+            key="srv_colegio"
+        )
+
         c3, c4, c5 = st.columns([1, 1, 1])
         duracion_srv = c3.selectbox("Duración del turno", [1, 2, 3, 4], index=3, format_func=lambda h: f"{h} hora(s)", key="srv_dur")
         usar_tardanza = c4.checkbox("Activar límite de tardanza", value=False, key="srv_chk_tard")
@@ -1053,6 +1059,7 @@ elif pagina == "🔐 Accesos Temporales":
                 f"{API_URL}/api/v1/admin/codigos-servicio",
                 json={
                     "tipo_asistencia": tipo_srv,
+                    "colegio_permitido": colegio_srv,
                     "detalle_evento": detalle_srv,
                     "duracion_horas": duracion_srv,
                     "hora_limite_tardanza": hora_limite_str
