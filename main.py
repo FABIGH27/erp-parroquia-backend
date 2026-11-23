@@ -130,6 +130,27 @@ def registrar_asistencia(request: schemas.AsistenciaQRRequest, db: Session = Dep
             detail="Código QR inválido o alumno no encontrado"
         )
 
+    # Verificar si quien escanea tiene rol de Administrador
+    usuario = db.query(models.Usuario).filter(models.Usuario.id_usuario == request.id_usuario).first()
+    es_admin = False
+    if usuario and usuario.rol:
+        es_admin = usuario.rol.nombre_rol.strip().lower() in ["administrador", "admin"]
+
+    # Si NO es administrador, impedir duplicados el mismo día y evento
+    if not es_admin:
+        ya_registrado = db.query(models.Asistencia).filter(
+            models.Asistencia.id_cateq == alumno.id_cateq,
+            models.Asistencia.tipo_asistencia == request.tipo_asistencia,
+            models.Asistencia.detalle_evento == request.detalle_evento,
+            func.date(models.Asistencia.fecha_hora) == func.current_date()
+        ).first()
+
+        if ya_registrado:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"{alumno.nombres} {alumno.apellidos} ya registró asistencia hoy en {request.tipo_asistencia}."
+            )
+
     nueva_asistencia = models.Asistencia(
         id_cateq=alumno.id_cateq,
         id_usuario=request.id_usuario,
@@ -223,10 +244,12 @@ def listar_pagos(db: Session = Depends(get_db)):
             models.ConceptoPago.nombre_conc,
             models.Pago.monto,
             models.Pago.metodo_pago,
-            models.Pago.fecha_hora
+            models.Pago.fecha_hora,
+            models.Usuario.nombres.label("registrado_por")
         )
         .join(models.Catequizando, models.Pago.id_cateq == models.Catequizando.id_cateq)
         .join(models.ConceptoPago, models.Pago.id_concepto == models.ConceptoPago.id_concepto)
+        .outerjoin(models.Usuario, models.Pago.id_usuario == models.Usuario.id_usuario)
         .order_by(models.Pago.fecha_hora.desc())
         .all()
     )
@@ -244,7 +267,8 @@ def listar_pagos(db: Session = Depends(get_db)):
                 "concepto": r.nombre_conc,
                 "monto": float(r.monto),
                 "metodo_pago": r.metodo_pago,
-                "fecha_hora": r.fecha_hora
+                "fecha_hora": r.fecha_hora,
+                "registrado_por": r.registrado_por or "Sistema"
             }
             for r in registros
         ]
@@ -338,9 +362,11 @@ def consultar_expediente_alumno(dni: str, db: Session = Depends(get_db)):
             models.DocumentoRequisito.nombre_doc,
             models.DocumentoRequisito.es_obligatorio,
             models.Expediente.estado,
-            models.Expediente.fecha_rec
+            models.Expediente.fecha_rec,
+            models.Usuario.nombres.label("registrado_por")
         )
         .join(models.DocumentoRequisito, models.Expediente.id_doc == models.DocumentoRequisito.id_doc)
+        .outerjoin(models.Usuario, models.Expediente.id_usuario == models.Usuario.id_usuario)
         .filter(models.Expediente.id_cateq == alumno.id_cateq)
         .all()
     )
@@ -354,7 +380,8 @@ def consultar_expediente_alumno(dni: str, db: Session = Depends(get_db)):
                 "documento": r.nombre_doc,
                 "obligatorio": r.es_obligatorio,
                 "estado": r.estado,
-                "fecha_recepcion": r.fecha_rec
+                "fecha_recepcion": r.fecha_rec,
+                "registrado_por": r.registrado_por or "Sistema"
             }
             for r in registros
         ]
@@ -494,9 +521,11 @@ def listar_asistencias(tipo: str | None = None, db: Session = Depends(get_db)):
             models.Catequizando.apellidos,
             models.Asistencia.tipo_asistencia,
             models.Asistencia.detalle_evento,
-            models.Asistencia.fecha_hora
+            models.Asistencia.fecha_hora,
+            models.Usuario.nombres.label("registrado_por")
         )
         .join(models.Catequizando, models.Asistencia.id_cateq == models.Catequizando.id_cateq)
+        .outerjoin(models.Usuario, models.Asistencia.id_usuario == models.Usuario.id_usuario)
     )
     if tipo:
         query = query.filter(models.Asistencia.tipo_asistencia == tipo)
@@ -509,7 +538,8 @@ def listar_asistencias(tipo: str | None = None, db: Session = Depends(get_db)):
             "Catequizando": f"{r.nombres} {r.apellidos}",
             "Tipo": r.tipo_asistencia,
             "Actividad": r.detalle_evento or "-",
-            "Fecha y Hora": r.fecha_hora
+            "Fecha y Hora": r.fecha_hora,
+            "Registrado por": r.registrado_por or "Sistema"
         }
         for r in registros
     ]

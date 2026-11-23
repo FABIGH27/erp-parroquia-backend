@@ -103,6 +103,7 @@ if "admin_logueado" not in st.session_state:
     st.session_state["admin_logueado"] = False
     st.session_state["admin_info"] = ""
     st.session_state["admin_rol"] = ""
+    st.session_state["admin_id"] = 1
 
 if "acceso_temporal" not in st.session_state:
     st.session_state["acceso_temporal"] = False
@@ -134,6 +135,7 @@ if not st.session_state["admin_logueado"]:
                         st.session_state["admin_logueado"] = True
                         st.session_state["admin_info"] = f"{data['usuario']} ({data['rol']})"
                         st.session_state["admin_rol"] = data["rol"]
+                        st.session_state["admin_id"] = data.get("id_usuario", 1)
                         st.session_state["acceso_temporal"] = False
                         st.rerun()
                     else:
@@ -565,7 +567,7 @@ elif pagina == "💰 Tesorería":
                                 "id_concepto": opciones_c[concepto_sel],
                                 "monto": monto,
                                 "metodo_pago": metodo,
-                                "id_usuario": 1
+                                "id_usuario": st.session_state.get("admin_id", 1)
                             },
                             timeout=15
                         )
@@ -694,7 +696,7 @@ elif pagina == "📁 Secretaría":
                                 "dni_catequizando": opciones_j[alumno_sel],
                                 "id_doc": opciones_d[doc_sel],
                                 "estado": estado_exp,
-                                "id_usuario": 1
+                                "id_usuario": st.session_state.get("admin_id", 1)
                             },
                             timeout=15
                         )
