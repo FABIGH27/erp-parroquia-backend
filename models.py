@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, B
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from database import Base
+from datetime import datetime
 
 
 class Rol(Base):
@@ -56,6 +57,8 @@ class Asistencia(Base):
     tipo_asistencia = Column(String(50), default="Catequesis", nullable=False)
     detalle_evento = Column(String(100), nullable=True)
 
+    metodo_registro = Column(String(20), default="QR")  # "QR" o "Manual"
+
 class ConceptoPago(Base):
     __tablename__ = "conceptos_pago"
 
@@ -101,3 +104,15 @@ class ClaveTemporal(Base):
     fecha_expiracion = Column(DateTime, nullable=True)
     activa = Column(Boolean, default=True, nullable=False)
     creado_en = Column(DateTime, default=func.now())
+
+class CodigoServicio(Base):
+    __tablename__ = "codigos_servicio"
+
+    id_codigo = Column(Integer, primary_key=True, index=True)
+    codigo = Column(String(20), unique=True, nullable=False, index=True)
+    tipo_asistencia = Column(String(50), nullable=False)
+    detalle_evento = Column(String(100), nullable=True)
+    hora_limite_tardanza = Column(String(5), nullable=True)  # Formato "HH:MM" hora Perú, ej: "15:15"
+    creado_en = Column(DateTime, default=datetime.utcnow)
+    expira_en = Column(DateTime, nullable=False)
+    activo = Column(Boolean, default=True)

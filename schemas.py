@@ -3,10 +3,14 @@ from decimal import Decimal
 from typing import Literal, Optional
 
 class AsistenciaQRRequest(BaseModel):
-    qr_token: str
+    qr_token: Optional[str] = None
+    dni: Optional[str] = None
     tipo_asistencia: str = "Catequesis"
     detalle_evento: Optional[str] = None
     id_usuario: int = 1
+    metodo_registro: str = "QR"                 # "QR" o "Manual"
+    codigo_servicio: Optional[str] = None       # Código de turno de 4h
+    fecha_hora_cliente: Optional[str] = None    # Para sincronizar cola offline
 
 class ConceptoPagoCreate(BaseModel):
     nombre_conc: str = Field(..., max_length=100, example="Matrícula Catequesis 2026")
@@ -51,3 +55,14 @@ class CatequizandoUpdate(BaseModel):
     dni: str
     nombres: str
     apellidos: str
+
+class CodigoServicioCreate(BaseModel):
+    tipo_asistencia: str
+    detalle_evento: Optional[str] = None
+    duracion_horas: int = 4                     # Máximo 4 horas
+    hora_limite_tardanza: Optional[str] = None  # Ej: "15:15" o None
+
+class LoginMovilRequest(BaseModel):
+    dni: str
+    password: str
+    codigo_servicio: str
