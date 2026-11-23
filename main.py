@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from sqlalchemy import text
@@ -190,11 +191,20 @@ def registrar_asistencia(request: schemas.AsistenciaQRRequest, db: Session = Dep
         func.date(models.Asistencia.fecha_hora) == fecha_registro.date()
     ).first()
 
-    if ya_registrado and not es_admin:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"{alumno.nombres} {alumno.apellidos} ya registró asistencia hoy en {tipo_final}."
-        )
+    if ya_registrado:
+        if not es_admin:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"{alumno.nombres} {alumno.apellidos} ya registró asistencia hoy en {tipo_final}."
+            )
+        if not request.forzar_duplicado:
+            return JSONResponse(
+                status_code=status.HTTP_409_CONFLICT,
+                content={
+                    "detail": f"{alumno.nombres} {alumno.apellidos} ya tiene asistencia hoy en {tipo_final}. ¿Deseas registrar el duplicado de todas formas?",
+                    "puede_forzar": True
+                }
+            )
 
     # 6. Calcular Presente vs Tardanza según hora límite en hora Perú (UTC-5)
     estado_asis = "Presente"
