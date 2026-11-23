@@ -471,7 +471,11 @@ elif pagina == "👥 Directorio de Catequizandos":
                         st.success(f"Registrado correctamente. Token QR: {resp_crear.json().get('qr_token', '')}")
                         st.rerun()
                     else:
-                        st.error(resp_crear.json().get("detail", "No se pudo registrar."))
+                        try:
+                            msg = resp_crear.json().get("detail", resp_crear.text)
+                        except Exception:
+                            msg = resp_crear.text
+                        st.error(f"Error ({resp_crear.status_code}): {msg}")
 
     resp_jovenes = requests.get(f"{API_URL}/api/v1/catequizandos", timeout=15)
     if resp_jovenes.status_code == 200:
