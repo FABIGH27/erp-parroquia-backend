@@ -11,6 +11,17 @@ st.set_page_config(page_title="ERP Parroquia - Confirmación", layout="wide")
 
 API_URL = "https://erp-parroquia-api.onrender.com"
 
+COLEGIOS_PARROQUIA = [
+    "Mercedes",
+    "Politécnico",
+    "Santa Mónica",
+    "César Vallejo",
+    "San Francisco de Borja",
+    "Particulares",
+]
+
+ESTADOS_BAUTISMO = ["Bautizado", "Por bautizar"]
+
 # =========================================================
 # FUNCIONES DE EXPORTACIÓN (EXCEL Y PDF) Y BUSCADOR
 # =========================================================
@@ -416,26 +427,48 @@ elif pagina == "👥 Directorio de Catequizandos":
     with st.expander("➕ Registrar Nuevo Catequizando"):
         with st.form("form_nuevo_catequizando", clear_on_submit=True):
             c1, c2, c3 = st.columns(3)
-            dni_nuevo = c1.text_input("DNI (8 dígitos)", max_chars=8)
-            nombres_nuevo = c2.text_input("Nombres")
-            apellidos_nuevo = c3.text_input("Apellidos")
-            btn_guardar = st.form_submit_button("Guardar y Generar QR")
+            dni_nuevo = c1.text_input("DNI del Joven (8 dígitos) *", max_chars=8)
+            nombres_nuevo = c2.text_input("Nombres *")
+            apellidos_nuevo = c3.text_input("Apellidos *")
+
+            c4, c5, c6 = st.columns(3)
+            colegio_nuevo = c4.selectbox("Colegio", COLEGIOS_PARROQUIA)
+            bautismo_nuevo = c5.selectbox("Bautismo", ESTADOS_BAUTISMO)
+            cel_joven_nuevo = c6.text_input("Celular del Joven", max_chars=15, placeholder="Ej: 987654321")
+
+            st.markdown("**Contactos de Apoderados (hasta 2)**")
+            a1, a2 = st.columns(2)
+            cel_ap1_nuevo = a1.text_input("Celular Apoderado 1", max_chars=15, placeholder="Ej: 912345678")
+            par_ap1_nuevo = a2.text_input("¿De quién es? (Apoderado 1)", placeholder="Ej: Mamá - María")
+
+            a3, a4 = st.columns(2)
+            cel_ap2_nuevo = a3.text_input("Celular Apoderado 2 (Opcional)", max_chars=15)
+            par_ap2_nuevo = a4.text_input("¿De quién es? (Apoderado 2 - Opcional)", placeholder="Ej: Papá - Juan")
+
+            btn_guardar = st.form_submit_button("Guardar y Generar QR", type="primary")
 
             if btn_guardar:
-                if not dni_nuevo or not nombres_nuevo or not apellidos_nuevo:
-                    st.warning("Completa todos los campos.")
+                if not dni_nuevo.strip() or not nombres_nuevo.strip() or not apellidos_nuevo.strip():
+                    st.warning("Completa al menos DNI, Nombres y Apellidos.")
                 else:
                     resp_crear = requests.post(
                         f"{API_URL}/api/v1/catequizandos",
                         json={
-                            "dni": dni_nuevo,
-                            "nombres": nombres_nuevo,
-                            "apellidos": apellidos_nuevo
+                            "dni": dni_nuevo.strip(),
+                            "nombres": nombres_nuevo.strip(),
+                            "apellidos": apellidos_nuevo.strip(),
+                            "colegio": colegio_nuevo,
+                            "estado_bautismo": bautismo_nuevo,
+                            "celular_joven": cel_joven_nuevo.strip() or None,
+                            "celular_apoderado_1": cel_ap1_nuevo.strip() or None,
+                            "parentesco_apoderado_1": par_ap1_nuevo.strip() or None,
+                            "celular_apoderado_2": cel_ap2_nuevo.strip() or None,
+                            "parentesco_apoderado_2": par_ap2_nuevo.strip() or None,
                         },
                         timeout=15
                     )
-                    if resp_crear.status_code == 200:
-                        st.success(f"Registrado correctamente. Token QR: {resp_crear.json()['qr_token']}")
+                    if resp_crear.status_code in (200, 201):
+                        st.success(f"Registrado correctamente. Token QR: {resp_crear.json().get('qr_token', '')}")
                         st.rerun()
                     else:
                         st.error(resp_crear.json().get("detail", "No se pudo registrar."))
@@ -445,11 +478,31 @@ elif pagina == "👥 Directorio de Catequizandos":
         lista = resp_jovenes.json()
         if lista:
             df = pd.DataFrame(lista)
-            busqueda = st.text_input("🔍 Buscar por DNI, nombre o apellido:")
-            if busqueda:
-                df = df[df.apply(lambda row: busqueda.lower() in row.astype(str).str.lower().to_string(), axis=1)]
-            st.dataframe(df, use_container_width=True, hide_index=True)
-            mostrar_botones_exportacion(df, "directorio_catequizandos", "Directorio de Catequizandos")
+
+            # Filtros rápidos (buscador + colegio + bautismo)
+            f1, f2, f3 = st.columns([2, 1.2, 1.2])
+            busqueda = f1.text_input("🔍 Buscar por DNI, nombre, apellido o celular:", key="busq_cat_dir")
+            filtro_colegio = f2.selectbox("Colegio", ["Todos"] + COLEGIOS_PARROQUIA, key="filt_col_dir")
+            filtro_bautismo = f3.selectbox("Bautismo", ["Todos"] + ESTADOS_BAUTISMO, key="filt_baut_dir")
+
+            df_filtrado = df.copy()
+            if busqueda.strip():
+                q = busqueda.strip().lower()
+                df_filtrado = df_filtrado[
+                    df_filtrado.apply(lambda row: q in row.astype(str).str.lower().to_string(), axis=1)
+                ]
+            if filtro_colegio != "Todos" and "Colegio" in df_filtrado.columns:
+                df_filtrado = df_filtrado[df_filtrado["Colegio"] == filtro_colegio]
+            if filtro_bautismo != "Todos" and "Bautismo" in df_filtrado.columns:
+                df_filtrado = df_filtrado[df_filtrado["Bautismo"] == filtro_bautismo]
+
+            # Ocultar columnas técnicas *_raw en la tabla y exportación
+            cols_visibles = [c for c in df_filtrado.columns if not c.endswith("_raw")]
+            df_mostrar = df_filtrado[cols_visibles]
+
+            st.caption(f"Mostrando **{len(df_mostrar)}** de **{len(df)}** catequizandos.")
+            st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
+            mostrar_botones_exportacion(df_mostrar, "directorio_catequizandos", "Directorio de Catequizandos")
 
             st.divider()
             st.subheader("🎫 Carnet QR Individual")
@@ -497,7 +550,7 @@ elif pagina == "👥 Directorio de Catequizandos":
 
                 alumnos_a_imprimir = []
                 if modo_bloque == "Todos los catequizandos filtrados en la tabla superior":
-                    dnis_filtrados = set(df["DNI"].tolist())
+                    dnis_filtrados = set(df_mostrar["DNI"].tolist())
                     alumnos_a_imprimir = [j for j in lista if j["DNI"] in dnis_filtrados]
                 else:
                     opciones_multi = {f"{j['Nombres']} {j['Apellidos']} (DNI: {j['DNI']})": j for j in lista}
@@ -530,15 +583,47 @@ elif pagina == "👥 Directorio de Catequizandos":
                 cat_obj = selector_con_buscador("Catequizando a modificar", opciones_edit, "edit_cat")
 
                 if cat_obj:
+                    col_actual = cat_obj.get("Colegio", "Particulares")
+                    idx_col = COLEGIOS_PARROQUIA.index(col_actual) if col_actual in COLEGIOS_PARROQUIA else len(COLEGIOS_PARROQUIA) - 1
+
+                    baut_actual = cat_obj.get("Bautismo", "Bautizado")
+                    idx_baut = ESTADOS_BAUTISMO.index(baut_actual) if baut_actual in ESTADOS_BAUTISMO else 0
+
                     with st.form(f"form_editar_cat_{cat_obj['ID']}"):
                         c1, c2, c3 = st.columns(3)
-                        edit_dni = c1.text_input("DNI", value=cat_obj["DNI"], max_chars=8)
-                        edit_nom = c2.text_input("Nombres", value=cat_obj["Nombres"])
-                        edit_ape = c3.text_input("Apellidos", value=cat_obj["Apellidos"])
-                        if st.form_submit_button("💾 Guardar Cambios"):
+                        edit_dni = c1.text_input("DNI del Joven *", value=cat_obj["DNI"], max_chars=8)
+                        edit_nom = c2.text_input("Nombres *", value=cat_obj["Nombres"])
+                        edit_ape = c3.text_input("Apellidos *", value=cat_obj["Apellidos"])
+
+                        c4, c5, c6 = st.columns(3)
+                        edit_col = c4.selectbox("Colegio", COLEGIOS_PARROQUIA, index=idx_col)
+                        edit_baut = c5.selectbox("Bautismo", ESTADOS_BAUTISMO, index=idx_baut)
+                        edit_cel_j = c6.text_input("Celular del Joven", value=cat_obj.get("celular_joven_raw", ""), max_chars=15)
+
+                        st.markdown("**Contactos de Apoderados (hasta 2)**")
+                        ea1, ea2 = st.columns(2)
+                        edit_cel_ap1 = ea1.text_input("Celular Apoderado 1", value=cat_obj.get("celular_apoderado_1_raw", ""), max_chars=15)
+                        edit_par_ap1 = ea2.text_input("¿De quién es? (Apoderado 1)", value=cat_obj.get("parentesco_apoderado_1_raw", ""))
+
+                        ea3, ea4 = st.columns(2)
+                        edit_cel_ap2 = ea3.text_input("Celular Apoderado 2 (Opcional)", value=cat_obj.get("celular_apoderado_2_raw", ""), max_chars=15)
+                        edit_par_ap2 = ea4.text_input("¿De quién es? (Apoderado 2 - Opcional)", value=cat_obj.get("parentesco_apoderado_2_raw", ""))
+
+                        if st.form_submit_button("💾 Guardar Cambios", type="primary"):
                             r_up = requests.put(
                                 f"{API_URL}/api/v1/catequizandos/{cat_obj['ID']}",
-                                json={"dni": edit_dni, "nombres": edit_nom, "apellidos": edit_ape},
+                                json={
+                                    "dni": edit_dni.strip(),
+                                    "nombres": edit_nom.strip(),
+                                    "apellidos": edit_ape.strip(),
+                                    "colegio": edit_col,
+                                    "estado_bautismo": edit_baut,
+                                    "celular_joven": edit_cel_j.strip() or None,
+                                    "celular_apoderado_1": edit_cel_ap1.strip() or None,
+                                    "parentesco_apoderado_1": edit_par_ap1.strip() or None,
+                                    "celular_apoderado_2": edit_cel_ap2.strip() or None,
+                                    "parentesco_apoderado_2": edit_par_ap2.strip() or None,
+                                },
                                 timeout=15
                             )
                             if r_up.status_code == 200:
