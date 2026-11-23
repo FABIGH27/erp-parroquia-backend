@@ -1401,3 +1401,136 @@ def buscar_catequizando_movil(q: str, db: Session = Depends(get_db)):
         }
         for c in resultados
     ]
+
+# =========================================================
+# VISUALIZADOR GENERAL (FICHA INTEGRAL DEL CATEQUIZANDO)
+# =========================================================
+@app.get("/api/v1/catequizandos/{id_cateq}/ficha-completa", tags=["Gestión de Catequizandos"])
+def obtener_ficha_completa(id_cateq: int, db: Session = Depends(get_db)):
+    alumno = db.query(models.Catequizando).filter(models.Catequizando.id_cateq == id_cateq).first()
+    if not alumno:
+        raise HTTPException(status_code=404, detail="Catequizando no encontrado.")
+
+    # 1. Asistencias del catequizando
+    asistencias_db = (
+        db.query(
+            models.Asistencia.tipo_asistencia,
+            models.Asistencia.detalle_evento,
+            models.Asistencia.estado,
+            models.Asistencia.metodo_registro,
+            models.Asistencia.fecha_hora,
+            models.Usuario.nombres.label("registrado_por")
+        )
+        .outerjoin(models.Usuario, models.Asistencia.id_usuario == models.Usuario.id_usuario)
+        .filter(models.Asistencia.id_cateq == id_cateq)
+        .order_by(models.Asistencia.fecha_hora.asc())
+        .all()
+    )
+
+    asistencias_lista = [
+        {
+            "tipo": a.tipo_asistencia,
+            "detalle": a.detalle_evento or "-",
+            "estado": a.estado or "Presente",
+            "metodo": a.metodo_registro or "QR",
+            "fecha_hora": a.fecha_hora.strftime("%d/%m/%Y %H:%M") if a.fecha_hora else "-",
+            "registrado_por": a.registrado_por or "Sistema"
+        }
+        for a in asistencias_db
+    ]
+
+    # 2. Pagos (resumen por concepto + historial detallado)
+    conceptos = db.query(models.ConceptoPago).all()
+    pagos_db = (
+        db.query(
+            models.Pago.id_pago,
+            models.Pago.id_concepto,
+            models.ConceptoPago.nombre_conc,
+            models.Pago.monto,
+            models.Pago.metodo_pago,
+            models.Pago.fecha_hora,
+            models.Usuario.nombres.label("registrado_por")
+        )
+        .join(models.ConceptoPago, models.Pago.id_concepto == models.ConceptoPago.id_concepto)
+        .outerjoin(models.Usuario, models.Pago.id_usuario == models.Usuario.id_usuario)
+        .filter(models.Pago.id_cateq == id_cateq)
+        .order_by(models.Pago.fecha_hora.desc())
+        .all()
+    )
+
+    pagos_por_concepto = {}
+    for p in pagos_db:
+        pagos_por_concepto[p.id_concepto] = pagos_por_concepto.get(p.id_concepto, 0.0) + float(p.monto)
+
+    resumen_pagos = []
+    for c in conceptos:
+        base = float(c.monto_base)
+        pagado = pagos_por_concepto.get(c.id_concepto, 0.0)
+        debe = max(0.0, round(base - pagado, 2))
+        estado_p = "Pagado" if debe == 0 else ("Parcial" if pagado > 0 else "Pendiente")
+        resumen_pagos.append({
+            "Concepto": c.nombre_conc,
+            "Monto Base (S/)": base,
+            "Pagado (S/)": pagado,
+            "Debe (S/)": debe,
+            "Estado": estado_p
+        })
+
+    historial_pagos = [
+        {
+            "ID": p.id_pago,
+            "Concepto": p.nombre_conc,
+            "Monto (S/)": float(p.monto),
+            "Método": p.metodo_pago,
+            "Fecha y Hora": p.fecha_hora.strftime("%d/%m/%Y %H:%M") if p.fecha_hora else "-",
+            "Registrado por": p.registrado_por or "Sistema"
+        }
+        for p in pagos_db
+    ]
+
+    # 3. Documentos (checklist completo contra el catálogo)
+    docs_catalogo = db.query(models.DocumentoRequisito).all()
+    exp_db = (
+        db.query(
+            models.Expediente.id_doc,
+            models.Expediente.estado,
+            models.Expediente.fecha_rec,
+            models.Usuario.nombres.label("registrado_por")
+        )
+        .outerjoin(models.Usuario, models.Expediente.id_usuario == models.Usuario.id_usuario)
+        .filter(models.Expediente.id_cateq == id_cateq)
+        .all()
+    )
+    mapa_exp = {e.id_doc: e for e in exp_db}
+
+    documentos_lista = []
+    for d in docs_catalogo:
+        reg = mapa_exp.get(d.id_doc)
+        documentos_lista.append({
+            "Documento": d.nombre_doc,
+            "Obligatorio": "Sí" if d.es_obligatorio else "No",
+            "Estado": reg.estado if reg else "Sin entregar",
+            "Fecha Recepción": reg.fecha_rec.strftime("%d/%m/%Y %H:%M") if (reg and reg.fecha_rec) else "-",
+            "Registrado por": (reg.registrado_por or "Sistema") if reg else "-"
+        })
+
+    return {
+        "datos": {
+            "ID": alumno.id_cateq,
+            "DNI": alumno.dni,
+            "Nombres": alumno.nombres,
+            "Apellidos": alumno.apellidos,
+            "QR Token": alumno.qr_token,
+            "Colegio": alumno.colegio or "Sin asignar",
+            "Bautismo": alumno.estado_bautismo or "Bautizado",
+            "Celular Joven": alumno.celular_joven or "-",
+            "Apoderado 1": f"{alumno.celular_apoderado_1} ({alumno.parentesco_apoderado_1 or 'Apoderado'})" if alumno.celular_apoderado_1 else "-",
+            "Apoderado 2": f"{alumno.celular_apoderado_2} ({alumno.parentesco_apoderado_2 or 'Apoderado'})" if alumno.celular_apoderado_2 else "-",
+        },
+        "asistencias": asistencias_lista,
+        "pagos": {
+            "resumen": resumen_pagos,
+            "historial": historial_pagos
+        },
+        "documentos": documentos_lista
+    }
