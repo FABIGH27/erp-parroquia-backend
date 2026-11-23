@@ -525,6 +525,8 @@ elif pagina == "👥 Directorio de Catequizandos":
                 with col_btn:
                     st.write(f"**Catequizando:** {alumno_sel['Nombres']} {alumno_sel['Apellidos']}")
                     st.write(f"**DNI:** {alumno_sel['DNI']}")
+                    st.write(f"**Colegio:** {alumno_sel.get('Colegio', 'Sin asignar')}")
+                    st.write(f"**Bautismo:** {alumno_sel.get('Bautismo', 'Bautizado')}")
                     b1, b2 = st.columns(2)
                     with b1:
                         st.download_button(
