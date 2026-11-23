@@ -1193,7 +1193,7 @@ elif pagina == "🏫 Grupos y Salones":
                     horizontal=True,
                     key="asig_tipo_az"
                 )
-                cant_bloques = c_cant.selectbox("¿En cuántos bloques dividir?", [2, 3, 4], index=3, key="asig_cant_az")
+                cant_bloques = c_cant.selectbox("¿En cuántos bloques dividir?", [2, 3, 4], index=2, key="asig_cant_az")
 
                 es_grupo = tipo_asig.startswith("Grupo")
                 etiquetas = ["Grupo A", "Grupo B", "Grupo C", "Grupo D"][:cant_bloques] if es_grupo else ["Salón 1", "Salón 2", "Salón 3", "Salón 4"][:cant_bloques]
