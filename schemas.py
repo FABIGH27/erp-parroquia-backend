@@ -65,4 +65,4 @@ class CodigoServicioCreate(BaseModel):
 class LoginMovilRequest(BaseModel):
     dni: str
     password: str
-    codigo_servicio: str
+    codigo_servicio: Optional[str] = None

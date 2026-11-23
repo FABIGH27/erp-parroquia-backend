@@ -135,7 +135,7 @@ PERU_TZ = timezone(timedelta(hours=-5))
 def registrar_asistencia(request: schemas.AsistenciaQRRequest, db: Session = Depends(get_db)):
     # 1. Validar código de servicio si viene desde la APK (revocación en vivo y expiración)
     codigo_srv = None
-    if request.codigo_servicio:
+    if request.codigo_servicio and request.codigo_servicio != "ADMIN-LIBRE":
         codigo_srv = db.query(models.CodigoServicio).filter(
             models.CodigoServicio.codigo == request.codigo_servicio.strip().upper()
         ).first()
@@ -1241,12 +1241,46 @@ def revocar_codigo_servicio(id_codigo: int, db: Session = Depends(get_db)):
 
 @app.post("/api/v1/movil/login", tags=["Móvil APK"])
 def login_movil_con_codigo(req: schemas.LoginMovilRequest, db: Session = Depends(get_db)):
-    # 1. Validar usuario (usa el mismo método de verificación que login_admin)
-    admin_resp = login_admin(schemas.AdminLoginRequest(dni=req.dni, password=req.password), db)
+    dni_limpio = req.dni.strip()
+    usuario = db.query(models.Usuario).filter(models.Usuario.dni == dni_limpio).first()
 
-    # 2. Validar código de servicio de 4 horas
+    if not usuario or not usuario.estado:
+        raise HTTPException(status_code=401, detail="DNI no registrado o usuario inactivo.")
+
+    # Verificación de contraseña (compatible con hash bcrypt o texto plano)
+    pass_ok = False
+    try:
+        pass_ok = pwd_context.verify(req.password, usuario.password_hash)
+    except Exception:
+        pass_ok = (usuario.password_hash == req.password)
+
+    if not pass_ok:
+        raise HTTPException(status_code=401, detail="Contraseña incorrecta.")
+
+    nombre_rol = usuario.rol.nombre_rol if usuario.rol else "Usuario"
+    es_admin = nombre_rol.strip().lower() in ["administrador", "admin"]
+    codigo_limpio = (req.codigo_servicio or "").strip().upper()
+
+    # Si es Administrador y NO ingresó código de servicio, entra directo
+    if es_admin and not codigo_limpio:
+        return {
+            "mensaje": "Turno de Administrador iniciado",
+            "id_usuario": usuario.id_usuario,
+            "usuario": usuario.nombres,
+            "rol": nombre_rol,
+            "codigo_servicio": "ADMIN-LIBRE",
+            "tipo_asistencia": "Catequesis",
+            "detalle_evento": None,
+            "hora_limite_tardanza": None,
+            "segundos_restantes": 14400
+        }
+
+    # Si NO es admin (o si es admin pero sí escribió un código), validar el código
+    if not codigo_limpio:
+        raise HTTPException(status_code=403, detail="Debes ingresar el Código de Servicio del día.")
+
     cod = db.query(models.CodigoServicio).filter(
-        models.CodigoServicio.codigo == req.codigo_servicio.strip().upper()
+        models.CodigoServicio.codigo == codigo_limpio
     ).first()
 
     if not cod or not cod.activo:
@@ -1260,14 +1294,13 @@ def login_movil_con_codigo(req: schemas.LoginMovilRequest, db: Session = Depends
 
     return {
         "mensaje": "Turno iniciado",
-        "id_usuario": admin_resp["id_usuario"],
-        "usuario": admin_resp["usuario"],
-        "rol": admin_resp["rol"],
+        "id_usuario": usuario.id_usuario,
+        "usuario": usuario.nombres,
+        "rol": nombre_rol,
         "codigo_servicio": cod.codigo,
         "tipo_asistencia": cod.tipo_asistencia,
         "detalle_evento": cod.detalle_evento,
         "hora_limite_tardanza": cod.hora_limite_tardanza,
-        "expira_en_utc": cod.expira_en.isoformat() + "Z",
         "segundos_restantes": segundos_restantes
     }
 
