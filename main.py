@@ -132,7 +132,7 @@ def registrar_asistencia(request: schemas.AsistenciaQRRequest, db: Session = Dep
 
     nueva_asistencia = models.Asistencia(
         id_cateq=alumno.id_cateq,
-        id_usuario=1,
+        id_usuario=request.id_usuario,
         tipo_asistencia=request.tipo_asistencia,
         detalle_evento=request.detalle_evento
     )
@@ -426,6 +426,7 @@ def login_admin(datos: LoginAdminRequest, db: Session = Depends(get_db)):
     nombre_rol = usuario.rol.nombre_rol if usuario.rol else "Administrador"
     return {
         "mensaje": "Acceso concedido",
+        "id_usuario": usuario.id_usuario,
         "usuario": usuario.nombres,
         "rol": nombre_rol
     }
