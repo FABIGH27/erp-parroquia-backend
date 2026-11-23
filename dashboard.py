@@ -241,6 +241,91 @@ if pagina == "📊 Resumen General":
                     st.bar_chart(datos["estado_expedientes"])
                 else:
                     st.caption("Sin expedientes registrados aún.")
+            st.divider()
+            st.subheader("🚨 Panel de Alertas y Seguimiento")
+
+            resp_alertas = requests.get(f"{API_URL}/api/v1/dashboard/alertas", timeout=20)
+            if resp_alertas.status_code == 200:
+                alertas = resp_alertas.json()
+                deudores = alertas.get("deudores", [])
+                docs_pend = alertas.get("documentos_pendientes", [])
+                asis_res = alertas.get("asistencias_resumen", [])
+
+                tab_a1, tab_a2, tab_a3 = st.tabs([
+                    f"💸 Pagos Pendientes ({len(deudores)})",
+                    f"📄 Docs. Faltantes / Observados ({len(docs_pend)})",
+                    "⚠️ Baja Asistencia"
+                ])
+
+                with tab_a1:
+                    if deudores:
+                        df_deu = pd.DataFrame(deudores)
+                        col_f1, col_f2 = st.columns(2)
+                        conceptos_unicos = ["Todos"] + sorted(df_deu["Concepto"].unique().tolist())
+                        filtro_conc = col_f1.selectbox("Filtrar por concepto:", conceptos_unicos, key="alerta_conc")
+                        busq_deu = col_f2.text_input("🔍 Buscar por DNI o nombre:", key="alerta_busq_deu")
+
+                        if filtro_conc != "Todos":
+                            df_deu = df_deu[df_deu["Concepto"] == filtro_conc]
+                        if busq_deu:
+                            df_deu = df_deu[
+                                df_deu.apply(lambda r: busq_deu.lower() in r.astype(str).str.lower().to_string(),
+                                             axis=1)]
+
+                        st.metric("Total por Cobrar (filtrado)", f"S/ {df_deu['Debe (S/)'].sum():.2f}")
+                        st.dataframe(df_deu, use_container_width=True, hide_index=True)
+                        mostrar_botones_exportacion(df_deu, "alerta_deudores", "Reporte de Pagos Pendientes")
+                    else:
+                        st.success("No hay pagos pendientes.")
+
+                with tab_a2:
+                    if docs_pend:
+                        df_docs = pd.DataFrame(docs_pend)
+                        col_d1, col_d2, col_d3 = st.columns(3)
+                        docs_unicos = ["Todos"] + sorted(df_docs["Documento"].unique().tolist())
+                        estados_unicos = ["Todos"] + sorted(df_docs["Estado"].unique().tolist())
+
+                        filtro_doc = col_d1.selectbox("Filtrar por documento:", docs_unicos, key="alerta_doc")
+                        filtro_est = col_d2.selectbox("Filtrar por estado:", estados_unicos, key="alerta_est")
+                        busq_doc = col_d3.text_input("🔍 Buscar por DNI o nombre:", key="alerta_busq_doc")
+
+                        if filtro_doc != "Todos":
+                            df_docs = df_docs[df_docs["Documento"] == filtro_doc]
+                        if filtro_est != "Todos":
+                            df_docs = df_docs[df_docs["Estado"] == filtro_est]
+                        if busq_doc:
+                            df_docs = df_docs[
+                                df_docs.apply(lambda r: busq_doc.lower() in r.astype(str).str.lower().to_string(),
+                                              axis=1)]
+
+                        st.dataframe(df_docs, use_container_width=True, hide_index=True)
+                        mostrar_botones_exportacion(df_docs, "alerta_documentos", "Reporte de Documentos Pendientes")
+                    else:
+                        st.success("Todos los catequizandos tienen sus documentos obligatorios al día.")
+
+                with tab_a3:
+                    if asis_res:
+                        df_asis = pd.DataFrame(asis_res)
+                        col_s1, col_s2, col_s3 = st.columns(3)
+                        min_cat = col_s1.number_input("Alertar si Catequesis es menor a:", min_value=0, value=1, step=1)
+                        min_misa = col_s2.number_input("Alertar si Misas es menor a:", min_value=0, value=1, step=1)
+                        busq_as = col_s3.text_input("🔍 Buscar por DNI o nombre:", key="alerta_busq_asis")
+
+                        df_riesgo = df_asis[(df_asis["Catequesis"] < min_cat) | (df_asis["Misas"] < min_misa)]
+                        if busq_as:
+                            df_riesgo = df_riesgo[
+                                df_riesgo.apply(lambda r: busq_as.lower() in r.astype(str).str.lower().to_string(),
+                                                axis=1)]
+
+                        st.caption(f"Mostrando **{len(df_riesgo)}** catequizandos por debajo del mínimo configurado.")
+                        st.dataframe(df_riesgo, use_container_width=True, hide_index=True)
+                        if not df_riesgo.empty:
+                            mostrar_botones_exportacion(df_riesgo, "alerta_baja_asistencia",
+                                                        "Reporte de Baja Asistencia")
+                    else:
+                        st.info("Aún no hay catequizandos registrados.")
+            else:
+                st.warning("No se pudo cargar el panel de alertas.")
         else:
             st.error("No se pudieron cargar las métricas.")
     except Exception as e:

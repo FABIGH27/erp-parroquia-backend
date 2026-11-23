@@ -726,3 +726,97 @@ def eliminar_documento_requisito(id_doc: int, db: Session = Depends(get_db)):
             detail="No se puede eliminar porque ya hay catequizandos con este documento registrado."
         )
     return {"mensaje": "Documento eliminado del catálogo."}
+
+# =========================================================
+# PANEL DE ALERTAS (DEUDORES, DOCUMENTOS Y BAJA ASISTENCIA)
+# =========================================================
+@app.get("/api/v1/dashboard/alertas", tags=["Dashboard"])
+def obtener_alertas_dashboard(db: Session = Depends(get_db)):
+    jovenes = db.query(models.Catequizando).all()
+    conceptos = db.query(models.ConceptoPago).all()
+    docs_obligatorios = db.query(models.DocumentoRequisito).filter(
+        models.DocumentoRequisito.es_obligatorio == True
+    ).all()
+
+    # 1. Pagos agrupados por (alumno, concepto)
+    pagos_agg = (
+        db.query(
+            models.Pago.id_cateq,
+            models.Pago.id_concepto,
+            func.sum(models.Pago.monto)
+        )
+        .group_by(models.Pago.id_cateq, models.Pago.id_concepto)
+        .all()
+    )
+    mapa_pagos = {(r[0], r[1]): float(r[2] or 0) for r in pagos_agg}
+
+    # 2. Expedientes registrados por (alumno, documento)
+    expedientes = db.query(
+        models.Expediente.id_cateq,
+        models.Expediente.id_doc,
+        models.Expediente.estado
+    ).all()
+    mapa_exp = {(r[0], r[1]): r[2] for r in expedientes}
+
+    # 3. Asistencias agrupadas por (alumno, tipo)
+    asis_agg = (
+        db.query(
+            models.Asistencia.id_cateq,
+            models.Asistencia.tipo_asistencia,
+            func.count(models.Asistencia.id_asis)
+        )
+        .group_by(models.Asistencia.id_cateq, models.Asistencia.tipo_asistencia)
+        .all()
+    )
+    mapa_asis = {(r[0], r[1]): int(r[2] or 0) for r in asis_agg}
+
+    deudores = []
+    docs_pendientes = []
+    asistencias_resumen = []
+
+    for j in jovenes:
+        nombre_completo = f"{j.nombres} {j.apellidos}"
+
+        # Evaluar deudas por concepto
+        for c in conceptos:
+            base = float(c.monto_base)
+            pagado = mapa_pagos.get((j.id_cateq, c.id_concepto), 0.0)
+            if pagado < base:
+                deudores.append({
+                    "DNI": j.dni,
+                    "Catequizando": nombre_completo,
+                    "Concepto": c.nombre_conc,
+                    "Monto Base (S/)": base,
+                    "Pagado (S/)": pagado,
+                    "Debe (S/)": round(base - pagado, 2)
+                })
+
+        # Evaluar documentos obligatorios faltantes u observados
+        for d in docs_obligatorios:
+            estado = mapa_exp.get((j.id_cateq, d.id_doc), "Sin entregar")
+            if estado != "Entregado":
+                docs_pendientes.append({
+                    "DNI": j.dni,
+                    "Catequizando": nombre_completo,
+                    "Documento": d.nombre_doc,
+                    "Estado": estado
+                })
+
+        # Resumen de asistencias por alumno
+        cat = mapa_asis.get((j.id_cateq, "Catequesis"), 0)
+        misas = mapa_asis.get((j.id_cateq, "Misa"), 0)
+        acts = mapa_asis.get((j.id_cateq, "Actividad Parroquial"), 0)
+        asistencias_resumen.append({
+            "DNI": j.dni,
+            "Catequizando": nombre_completo,
+            "Catequesis": cat,
+            "Misas": misas,
+            "Actividades": acts,
+            "Total": cat + misas + acts
+        })
+
+    return {
+        "deudores": deudores,
+        "documentos_pendientes": docs_pendientes,
+        "asistencias_resumen": asistencias_resumen
+    }
