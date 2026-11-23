@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from datetime import datetime, timedelta
 import secrets
 from sqlalchemy.exc import IntegrityError
+from typing import Dict, Any, List
 
 
 # Sincroniza y crea las tablas en MySQL si no existen
@@ -851,3 +852,224 @@ def obtener_alertas_dashboard(db: Session = Depends(get_db)):
         "documentos_pendientes": docs_pendientes,
         "asistencias_resumen": asistencias_resumen
     }
+
+# =========================================================
+# RESPALDO COMPLETO (BACKUP) Y RESTAURACIÓN (SOLO ADMIN)
+# =========================================================
+@app.get("/api/v1/admin/backup/exportar", tags=["Seguridad y Accesos"])
+def exportar_backup_completo(db: Session = Depends(get_db)):
+    return {
+        "fecha_backup": datetime.utcnow().isoformat(),
+        "roles": [
+            {"id_rol": r.id_rol, "nombre_rol": r.nombre_rol, "nivel_acceso": r.nivel_acceso}
+            for r in db.query(models.Rol).all()
+        ],
+        "usuarios": [
+            {
+                "id_usuario": u.id_usuario,
+                "id_rol": u.id_rol,
+                "dni": u.dni,
+                "nombres": u.nombres,
+                "password_hash": u.password_hash,
+                "estado": u.estado
+            }
+            for u in db.query(models.Usuario).all()
+        ],
+        "catequizandos": [
+            {
+                "id_cateq": c.id_cateq,
+                "dni": c.dni,
+                "nombres": c.nombres,
+                "apellidos": c.apellidos,
+                "qr_token": c.qr_token
+            }
+            for c in db.query(models.Catequizando).all()
+        ],
+        "conceptos_pago": [
+            {
+                "id_concepto": cp.id_concepto,
+                "nombre_conc": cp.nombre_conc,
+                "monto_base": float(cp.monto_base)
+            }
+            for cp in db.query(models.ConceptoPago).all()
+        ],
+        "documentos_requisito": [
+            {
+                "id_doc": d.id_doc,
+                "nombre_doc": d.nombre_doc,
+                "es_obligatorio": d.es_obligatorio
+            }
+            for d in db.query(models.DocumentoRequisito).all()
+        ],
+        "asistencias": [
+            {
+                "id_asis": a.id_asis,
+                "id_cateq": a.id_cateq,
+                "id_usuario": a.id_usuario,
+                "fecha_hora": a.fecha_hora.isoformat() if a.fecha_hora else None,
+                "estado": a.estado,
+                "tipo_asistencia": a.tipo_asistencia,
+                "detalle_evento": a.detalle_evento
+            }
+            for a in db.query(models.Asistencia).all()
+        ],
+        "pagos": [
+            {
+                "id_pago": p.id_pago,
+                "id_cateq": p.id_cateq,
+                "id_usuario": p.id_usuario,
+                "id_concepto": p.id_concepto,
+                "monto": float(p.monto),
+                "metodo_pago": p.metodo_pago,
+                "fecha_hora": p.fecha_hora.isoformat() if p.fecha_hora else None
+            }
+            for p in db.query(models.Pago).all()
+        ],
+        "expedientes": [
+            {
+                "id_exp": e.id_exp,
+                "id_cateq": e.id_cateq,
+                "id_doc": e.id_doc,
+                "id_usuario": e.id_usuario,
+                "estado": e.estado,
+                "fecha_rec": e.fecha_rec.isoformat() if e.fecha_rec else None
+            }
+            for e in db.query(models.Expediente).all()
+        ]
+    }
+
+
+@app.post("/api/v1/admin/backup/restaurar", tags=["Seguridad y Accesos"])
+def restaurar_backup_completo(datos: Dict[str, Any], db: Session = Depends(get_db)):
+    resumen = {}
+
+    def _parse_fecha(valor):
+        if not valor:
+            return None
+        try:
+            return datetime.fromisoformat(str(valor).replace("Z", "+00:00"))
+        except Exception:
+            return None
+
+    try:
+        # 1. Roles
+        c_roles = 0
+        for r in datos.get("roles", []):
+            if not db.query(models.Rol).filter(models.Rol.id_rol == r["id_rol"]).first():
+                db.add(models.Rol(**r))
+                c_roles += 1
+        db.flush()
+        resumen["roles"] = c_roles
+
+        # 2. Usuarios
+        c_usr = 0
+        for u in datos.get("usuarios", []):
+            existe = db.query(models.Usuario).filter(
+                (models.Usuario.id_usuario == u["id_usuario"]) | (models.Usuario.dni == u["dni"])
+            ).first()
+            if not existe:
+                db.add(models.Usuario(**u))
+                c_usr += 1
+        db.flush()
+        resumen["usuarios"] = c_usr
+
+        # 3. Catequizandos
+        c_cat = 0
+        for c in datos.get("catequizandos", []):
+            existe = db.query(models.Catequizando).filter(
+                (models.Catequizando.id_cateq == c["id_cateq"]) | (models.Catequizando.dni == c["dni"])
+            ).first()
+            if not existe:
+                db.add(models.Catequizando(**c))
+                c_cat += 1
+        db.flush()
+        resumen["catequizandos"] = c_cat
+
+        # 4. Conceptos de Pago
+        c_conc = 0
+        for cp in datos.get("conceptos_pago", []):
+            existe = db.query(models.ConceptoPago).filter(
+                (models.ConceptoPago.id_concepto == cp["id_concepto"]) |
+                (models.ConceptoPago.nombre_conc == cp["nombre_conc"])
+            ).first()
+            if not existe:
+                db.add(models.ConceptoPago(**cp))
+                c_conc += 1
+        db.flush()
+        resumen["conceptos_pago"] = c_conc
+
+        # 5. Documentos Requisito
+        c_doc = 0
+        for d in datos.get("documentos_requisito", []):
+            existe = db.query(models.DocumentoRequisito).filter(
+                (models.DocumentoRequisito.id_doc == d["id_doc"]) |
+                (models.DocumentoRequisito.nombre_doc == d["nombre_doc"])
+            ).first()
+            if not existe:
+                db.add(models.DocumentoRequisito(**d))
+                c_doc += 1
+        db.flush()
+        resumen["documentos_requisito"] = c_doc
+
+        # 6. Asistencias
+        c_asis = 0
+        for a in datos.get("asistencias", []):
+            if not db.query(models.Asistencia).filter(models.Asistencia.id_asis == a["id_asis"]).first():
+                a_copia = dict(a)
+                a_copia["fecha_hora"] = _parse_fecha(a.get("fecha_hora"))
+                db.add(models.Asistencia(**a_copia))
+                c_asis += 1
+        db.flush()
+        resumen["asistencias"] = c_asis
+
+        # 7. Pagos
+        c_pag = 0
+        for p in datos.get("pagos", []):
+            if not db.query(models.Pago).filter(models.Pago.id_pago == p["id_pago"]).first():
+                p_copia = dict(p)
+                p_copia["fecha_hora"] = _parse_fecha(p.get("fecha_hora"))
+                db.add(models.Pago(**p_copia))
+                c_pag += 1
+        db.flush()
+        resumen["pagos"] = c_pag
+
+        # 8. Expedientes
+        c_exp = 0
+        for e in datos.get("expedientes", []):
+            if not db.query(models.Expediente).filter(models.Expediente.id_exp == e["id_exp"]).first():
+                e_copia = dict(e)
+                e_copia["fecha_rec"] = _parse_fecha(e.get("fecha_rec"))
+                db.add(models.Expediente(**e_copia))
+                c_exp += 1
+        db.commit()
+        resumen["expedientes"] = c_exp
+
+        return {"mensaje": "Restauración completada exitosamente", "registros_restaurados": resumen}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al restaurar backup: {str(e)}")
+
+
+@app.post("/api/v1/admin/importar/catequizandos", tags=["Gestión de Catequizandos"])
+def importar_catequizandos_masivo(lista: List[schemas.CatequizandoCreate], db: Session = Depends(get_db)):
+    creados = 0
+    omitidos = 0
+    for item in lista:
+        dni_limpio = item.dni.strip()
+        if len(dni_limpio) != 8:
+            omitidos += 1
+            continue
+        existe = db.query(models.Catequizando).filter(models.Catequizando.dni == dni_limpio).first()
+        if existe:
+            omitidos += 1
+            continue
+        nuevo = models.Catequizando(
+            dni=dni_limpio,
+            nombres=item.nombres.strip(),
+            apellidos=item.apellidos.strip(),
+            qr_token=f"CAT-{dni_limpio}"
+        )
+        db.add(nuevo)
+        creados += 1
+    db.commit()
+    return {"mensaje": "Importación finalizada", "creados": creados, "omitidos": omitidos}

@@ -5,6 +5,7 @@ import qrcode
 from io import BytesIO
 from datetime import datetime
 from fpdf import FPDF
+import json
 
 st.set_page_config(page_title="ERP Parroquia - Confirmación", layout="wide")
 
@@ -236,9 +237,9 @@ TODOS_LOS_MODULOS = [
 ]
 
 PERMISOS_POR_ROL = {
-    "administrador": TODOS_LOS_MODULOS + ["🔐 Accesos Temporales", "👤 Gestión de Usuarios"],
-    "admin": TODOS_LOS_MODULOS + ["🔐 Accesos Temporales", "👤 Gestión de Usuarios"],
-    "coordinador": TODOS_LOS_MODULOS + ["🔐 Accesos Temporales", "👤 Gestión de Usuarios"],
+    "administrador": TODOS_LOS_MODULOS + ["🔐 Accesos Temporales", "👤 Gestión de Usuarios", "💾 Respaldo y Restauración"],
+    "admin": TODOS_LOS_MODULOS + ["🔐 Accesos Temporales", "👤 Gestión de Usuarios", "💾 Respaldo y Restauración"],
+    "coordinador": TODOS_LOS_MODULOS + ["🔐 Accesos Temporales", "👤 Gestión de Usuarios", "💾 Respaldo y Restauración"],
     "vocal": ["📊 Resumen General", "👥 Directorio de Catequizandos", "📋 Control de Asistencias"],
     "tesorero": ["📊 Resumen General", "💰 Tesorería"],
     "tesorera": ["📊 Resumen General", "💰 Tesorería"],
@@ -979,3 +980,143 @@ elif pagina == "👤 Gestión de Usuarios":
                 st.error(f"No se pudo eliminar ({r_del.status_code}): {r_del.text}")
     else:
         st.info("No hay usuarios registrados.")
+
+# =========================================================
+# SECCIÓN 8: RESPALDO Y RESTAURACIÓN (SOLO ADMIN)
+# =========================================================
+elif pagina == "💾 Respaldo y Restauración":
+    st.title("💾 Respaldo y Restauración de Base de Datos")
+    st.caption("Descarga copias de seguridad completas o restaura el sistema ante cualquier imprevisto.")
+
+    tab_bk, tab_rest, tab_imp = st.tabs([
+        "📦 Descargar Copia de Seguridad",
+        "♻️ Restaurar desde Backup (.json)",
+        "📥 Importar Catequizandos (.xlsx)"
+    ])
+
+    with tab_bk:
+        st.subheader("Generar Respaldo Completo")
+        st.write(
+            "- **Backup Técnico (`.json`):** Sirve para restaurar exactamente toda la base de datos (roles, usuarios, catequizandos, asistencias, pagos y expedientes).\n"
+            "- **Respaldo Legible (`.xlsx`):** Archivo Excel con todas las tablas en pestañas separadas para archivo local."
+        )
+
+        if st.button("🔄 Generar Copia de Seguridad Ahora", type="primary"):
+            with st.spinner("Extrayendo todas las tablas desde TiDB Cloud..."):
+                r_bk = requests.get(f"{API_URL}/api/v1/admin/backup/exportar", timeout=30)
+
+            if r_bk.status_code == 200:
+                backup_data = r_bk.json()
+                fecha_tag = datetime.now().strftime("%Y%m%d_%H%M")
+
+                # 1. JSON técnico para restauración
+                json_bytes = json.dumps(backup_data, indent=2, ensure_ascii=False).encode("utf-8")
+
+                # 2. Excel multi-hoja legible
+                excel_buf = BytesIO()
+                with pd.ExcelWriter(excel_buf, engine="openpyxl") as writer:
+                    for tabla in [
+                        "catequizandos", "asistencias", "pagos",
+                        "expedientes", "conceptos_pago", "documentos_requisito",
+                        "usuarios", "roles"
+                    ]:
+                        df_t = pd.DataFrame(backup_data.get(tabla, []))
+                        df_t.to_excel(writer, index=False, sheet_name=tabla[:31])
+                excel_bytes = excel_buf.getvalue()
+
+                st.success("Copia de seguridad generada correctamente.")
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.download_button(
+                        label="⬇️ Descargar Backup Técnico (.json)",
+                        data=json_bytes,
+                        file_name=f"backup_erp_parroquia_{fecha_tag}.json",
+                        mime="application/json"
+                    )
+                with c2:
+                    st.download_button(
+                        label="📊 Descargar Respaldo Completo (.xlsx)",
+                        data=excel_bytes,
+                        file_name=f"respaldo_erp_parroquia_{fecha_tag}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+            else:
+                st.error(f"Error al generar respaldo ({r_bk.status_code}): {r_bk.text}")
+
+    with tab_rest:
+        st.subheader("Restaurar Base de Datos desde Archivo `.json`")
+        st.warning("Esta operación inserta los registros faltantes respetando sus IDs y relaciones originales. Los registros que ya existan en la base de datos se omiten sin sobrescribirse.")
+
+        archivo_json = st.file_uploader("Selecciona tu archivo backup_erp_parroquia_*.json", type=["json"])
+        if archivo_json is not None:
+            try:
+                contenido = json.loads(archivo_json.read().decode("utf-8"))
+                st.info(
+                    f"**Fecha del respaldo:** {contenido.get('fecha_backup', 'Desconocida')} | "
+                    f"**Catequizandos:** {len(contenido.get('catequizandos', []))} | "
+                    f"**Asistencias:** {len(contenido.get('asistencias', []))} | "
+                    f"**Pagos:** {len(contenido.get('pagos', []))}"
+                )
+                confirmar = st.checkbox("Confirmo que deseo restaurar estos datos en la base de datos actual.")
+                if confirmar and st.button("♻️ Iniciar Restauración", type="primary"):
+                    with st.spinner("Restaurando tablas en orden de dependencias..."):
+                        r_res = requests.post(
+                            f"{API_URL}/api/v1/admin/backup/restaurar",
+                            json=contenido,
+                            timeout=60
+                        )
+                    if r_res.status_code == 200:
+                        st.success("¡Restauración completada!")
+                        st.json(r_res.json().get("registros_restaurados", {}))
+                    else:
+                        st.error(f"Error ({r_res.status_code}): {r_res.text}")
+            except Exception as e:
+                st.error(f"Archivo JSON inválido: {e}")
+
+    with tab_imp:
+        st.subheader("Importación Masiva de Catequizandos desde Excel")
+        st.caption("El archivo Excel debe tener exactamente las columnas: **DNI**, **Nombres**, **Apellidos**.")
+
+        # Plantilla descargable
+        df_plantilla = pd.DataFrame([
+            {"DNI": "12345678", "Nombres": "Juan Carlos", "Apellidos": "Perez Quispe"}
+        ])
+        st.download_button(
+            label="📄 Descargar Plantilla Excel de Ejemplo",
+            data=generar_excel(df_plantilla),
+            file_name="plantilla_catequizandos.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+        archivo_xlsx = st.file_uploader("Sube tu archivo Excel (.xlsx)", type=["xlsx"])
+        if archivo_xlsx is not None:
+            try:
+                df_imp = pd.read_excel(archivo_xlsx, dtype={"DNI": str})
+                columnas_req = {"DNI", "Nombres", "Apellidos"}
+                if not columnas_req.issubset(set(df_imp.columns)):
+                    st.error("El Excel debe contener las columnas exactas: DNI, Nombres, Apellidos.")
+                else:
+                    st.dataframe(df_imp.head(20), use_container_width=True, hide_index=True)
+                    st.caption(f"Total de filas detectadas: **{len(df_imp)}**")
+                    if st.button("📥 Importar Catequizandos", type="primary"):
+                        payload = [
+                            {
+                                "dni": str(row["DNI"]).strip().zfill(8),
+                                "nombres": str(row["Nombres"]).strip(),
+                                "apellidos": str(row["Apellidos"]).strip()
+                            }
+                            for _, row in df_imp.dropna(subset=["DNI", "Nombres", "Apellidos"]).iterrows()
+                        ]
+                        with st.spinner("Importando catequizandos..."):
+                            r_imp = requests.post(
+                                f"{API_URL}/api/v1/admin/importar/catequizandos",
+                                json=payload,
+                                timeout=60
+                            )
+                        if r_imp.status_code == 200:
+                            res = r_imp.json()
+                            st.success(f"Importación terminada: **{res['creados']}** creados, **{res['omitidos']}** omitidos (duplicados o DNI inválido).")
+                        else:
+                            st.error(f"Error ({r_imp.status_code}): {r_imp.text}")
+            except Exception as e:
+                st.error(f"No se pudo leer el archivo Excel: {e}")
