@@ -249,8 +249,11 @@ def registrar_asistencia(request: schemas.AsistenciaQRRequest, db: Session = Dep
     db.commit()
     db.refresh(nueva_asistencia)
 
-    # 7. Consultar alertas discretas del catequizando (docs faltantes y deudas)
+    # 7. Consultar alertas discretas del catequizando (bautismo, docs faltantes y deudas)
     alertas_pendientes = []
+    if (alumno.estado_bautismo or "").strip().lower() == "por bautizar":
+        alertas_pendientes.append("Falta bautizarse")
+
     docs_oblig = db.query(models.DocumentoRequisito).filter(models.DocumentoRequisito.es_obligatorio == True).all()
     if docs_oblig:
         entregados = {
@@ -284,7 +287,7 @@ def registrar_asistencia(request: schemas.AsistenciaQRRequest, db: Session = Dep
         "metodo_registro": metodo_final,
         "hora_registro": nueva_asistencia.fecha_hora,
         "es_duplicado": ya_registrado is not None,
-        "alertas_pendientes": alertas_pendientes[:3]  # Máximo 3 para no saturar la pantalla
+        "alertas_pendientes": alertas_pendientes  # Máximo 3 para no saturar la pantalla
     }
 
 
@@ -674,6 +677,7 @@ def listar_asistencias(tipo: str | None = None, db: Session = Depends(get_db)):
             "ID": r.id_asis,
             "DNI": r.dni,
             "Catequizando": f"{r.nombres} {r.apellidos}",
+            "Colegio": r.colegio or "Sin asignar",
             "Tipo": r.tipo_asistencia,
             "Actividad": r.detalle_evento or "-",
             "Estado": r.estado or "Presente",
@@ -962,6 +966,7 @@ def obtener_alertas_dashboard(db: Session = Depends(get_db)):
                 deudores.append({
                     "DNI": j.dni,
                     "Catequizando": nombre_completo,
+                    "Colegio": j.colegio or "Sin asignar",
                     "Concepto": c.nombre_conc,
                     "Monto Base (S/)": base,
                     "Pagado (S/)": pagado,
@@ -975,6 +980,7 @@ def obtener_alertas_dashboard(db: Session = Depends(get_db)):
                 docs_pendientes.append({
                     "DNI": j.dni,
                     "Catequizando": nombre_completo,
+                    "Colegio": j.colegio or "Sin asignar",
                     "Documento": d.nombre_doc,
                     "Estado": estado
                 })
@@ -986,6 +992,7 @@ def obtener_alertas_dashboard(db: Session = Depends(get_db)):
         asistencias_resumen.append({
             "DNI": j.dni,
             "Catequizando": nombre_completo,
+            "Colegio": j.colegio or "Sin asignar",
             "Catequesis": cat,
             "Misas": misas,
             "Actividades": acts,
