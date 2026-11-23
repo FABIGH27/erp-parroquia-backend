@@ -1193,26 +1193,51 @@ elif pagina == "🏫 Grupos y Salones":
                     horizontal=True,
                     key="asig_tipo_az"
                 )
-                cant_bloques = c_cant.selectbox("¿En cuántos bloques dividir?", [2, 3, 4], index=2, key="asig_cant_az")
+                cant_bloques = c_cant.selectbox(
+                    "¿En cuántos bloques dividir?",
+                    [1, 2, 3, 4],
+                    index=0,
+                    key="asig_cant_az"
+                )
 
                 es_grupo = tipo_asig.startswith("Grupo")
-                etiquetas = ["Grupo A", "Grupo B", "Grupo C", "Grupo D"][:cant_bloques] if es_grupo else ["Salón 1", "Salón 2", "Salón 3", "Salón 4"][:cant_bloques]
+                lista_etiquetas = (
+                    ["Grupo A", "Grupo B", "Grupo C", "Grupo D"]
+                    if es_grupo
+                    else ["Salón 1", "Salón 2", "Salón 3", "Salón 4"]
+                )
 
                 # Cortes sugeridos por defecto
                 cortes_default = {
+                    1: [("A", "Z")],
                     2: [("A", "M"), ("N", "Z")],
                     3: [("A", "G"), ("H", "P"), ("Q", "Z")],
                     4: [("A", "F"), ("G", "L"), ("M", "R"), ("S", "Z")],
                 }[cant_bloques]
 
-                st.markdown("**Define el rango de letras (según la inicial del Apellido):**")
+                st.markdown("**Define el grupo/salón y el rango de letras (según la inicial del Apellido):**")
                 rangos_config = []
-                for idx, etiq in enumerate(etiquetas):
-                    r1, r2, r3, r4 = st.columns([1.2, 1, 1, 1.5])
-                    r1.markdown(f"#### {etiq}")
+                for idx in range(cant_bloques):
+                    r1, r2, r3, r4 = st.columns([1.4, 1, 1, 1.4])
+                    etiq = r1.selectbox(
+                        "Grupo" if es_grupo else "Salón",
+                        lista_etiquetas,
+                        index=idx,
+                        key=f"az_etiq_{es_grupo}_{cant_bloques}_{idx}"
+                    )
                     ini_def, fin_def = cortes_default[idx]
-                    l_ini = r2.selectbox("Desde", LETRAS_AZ, index=LETRAS_AZ.index(ini_def), key=f"az_ini_{etiq}")
-                    l_fin = r3.selectbox("Hasta", LETRAS_AZ, index=LETRAS_AZ.index(fin_def), key=f"az_fin_{etiq}")
+                    l_ini = r2.selectbox(
+                        "Desde",
+                        LETRAS_AZ,
+                        index=LETRAS_AZ.index(ini_def),
+                        key=f"az_ini_{cant_bloques}_{idx}"
+                    )
+                    l_fin = r3.selectbox(
+                        "Hasta",
+                        LETRAS_AZ,
+                        index=LETRAS_AZ.index(fin_def),
+                        key=f"az_fin_{cant_bloques}_{idx}"
+                    )
 
                     # Conteo en vivo de cuántos jóvenes caen en este rango
                     coinciden = [
