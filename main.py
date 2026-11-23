@@ -35,6 +35,7 @@ with engine.connect() as conn:
         "ALTER TABLE catequizandos ADD COLUMN parentesco_apoderado_1 VARCHAR(40) NULL",
         "ALTER TABLE catequizandos ADD COLUMN celular_apoderado_2 VARCHAR(20) NULL",
         "ALTER TABLE catequizandos ADD COLUMN parentesco_apoderado_2 VARCHAR(40) NULL",
+        "ALTER TABLE codigos_servicio ADD COLUMN colegio_permitido VARCHAR(60) DEFAULT 'Todos'",
     ]
     for sql in nuevas_cols:
         try:
@@ -181,6 +182,15 @@ def registrar_asistencia(request: schemas.AsistenciaQRRequest, db: Session = Dep
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Código QR o DNI no encontrado en el directorio."
         )
+
+    # 2.5. Validar colegio permitido si el turno usa un Código de Servicio restringido
+    if codigo_srv and codigo_srv.colegio_permitido and codigo_srv.colegio_permitido != "Todos":
+        colegio_alumno = (alumno.colegio or "Sin asignar").strip()
+        if colegio_alumno.lower() != codigo_srv.colegio_permitido.strip().lower():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Este código solo permite escanear alumnos de {codigo_srv.colegio_permitido}. {alumno.nombres} pertenece a: {colegio_alumno}."
+            )
 
     # 3. Verificar si es Administrador
     usuario = db.query(models.Usuario).filter(models.Usuario.id_usuario == request.id_usuario).first()
@@ -1245,6 +1255,7 @@ def crear_codigo_servicio(datos: schemas.CodigoServicioCreate, db: Session = Dep
         codigo=codigo_gen,
         tipo_asistencia=datos.tipo_asistencia,
         detalle_evento=datos.detalle_evento or None,
+        colegio_permitido=datos.colegio_permitido or "Todos",
         hora_limite_tardanza=datos.hora_limite_tardanza or None,
         expira_en=expira,
         activo=True
@@ -1280,6 +1291,7 @@ def listar_codigos_servicio(db: Session = Depends(get_db)):
             "ID": c.id_codigo,
             "Código": c.codigo,
             "Evento": f"{c.tipo_asistencia} ({c.detalle_evento})" if c.detalle_evento else c.tipo_asistencia,
+            "Colegio": c.colegio_permitido or "Todos",
             "Tardanza desde": c.hora_limite_tardanza or "-",
             "Expira (Perú)": exp_peru.strftime("%d/%m/%Y %H:%M"),
             "Estado": estado
@@ -1334,6 +1346,7 @@ def login_movil_con_codigo(req: schemas.LoginMovilRequest, db: Session = Depends
             "rol": nombre_rol,
             "codigo_servicio": "ADMIN-LIBRE",
             "tipo_asistencia": "Catequesis",
+            "colegio_permitido": "Todos",
             "detalle_evento": None,
             "hora_limite_tardanza": None,
             "segundos_restantes": 14400
@@ -1363,6 +1376,7 @@ def login_movil_con_codigo(req: schemas.LoginMovilRequest, db: Session = Depends
         "rol": nombre_rol,
         "codigo_servicio": cod.codigo,
         "tipo_asistencia": cod.tipo_asistencia,
+        "colegio_permitido": cod.colegio_permitido or "Todos",
         "detalle_evento": cod.detalle_evento,
         "hora_limite_tardanza": cod.hora_limite_tardanza,
         "segundos_restantes": segundos_restantes

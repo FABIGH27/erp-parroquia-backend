@@ -76,6 +76,7 @@ class CodigoServicioCreate(BaseModel):
     detalle_evento: Optional[str] = None
     duracion_horas: int = 4                     # Máximo 4 horas
     hora_limite_tardanza: Optional[str] = None  # Ej: "15:15" o None
+    colegio_permitido: Optional[str] = "Todos"
 
 class LoginMovilRequest(BaseModel):
     dni: str

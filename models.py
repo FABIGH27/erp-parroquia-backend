@@ -123,3 +123,4 @@ class CodigoServicio(Base):
     creado_en = Column(DateTime, default=datetime.utcnow)
     expira_en = Column(DateTime, nullable=False)
     activo = Column(Boolean, default=True)
+    colegio_permitido = Column(String(60), default="Todos")  # "Todos" o un colegio específico
