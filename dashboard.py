@@ -431,7 +431,12 @@ if b64_tau:
     )
 else:
     st.sidebar.title("⛪ ERP Parroquia")
-st.sidebar.success(f"👤 {st.session_state['admin_info']}")
+st.sidebar.markdown(
+    f'<div style="background-color:#3E2C22; border:1px solid #9C6644; border-radius:12px; '
+    f'padding:10px 14px; color:#F5EFE6; font-weight:600; font-size:0.95rem; margin-bottom:12px;">'
+    f'👤 {st.session_state["admin_info"]}</div>',
+    unsafe_allow_html=True,
+)
 
 rol_actual = st.session_state.get("admin_rol", "").strip().lower()
 es_admin = rol_actual in ["administrador", "admin", "coordinador"]
