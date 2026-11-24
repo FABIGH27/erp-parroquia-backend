@@ -420,9 +420,9 @@ if b64_tau:
     st.sidebar.markdown(
         f"""
         <div style="text-align:center; padding:8px 0 12px 0;">
-            <img src="data:image/jpeg;base64,{b64_tau}"
-                 style="width:92px; height:92px; object-fit:cover; border-radius:50%;
-                        border:2px solid #9C6644; background:#FFFFFF; padding:4px;" />
+            <img src="{b64_tau}"
+                style="width:92px; height:92px; object-fit:cover; border-radius:50%;
+                    border:2px solid #9C6644; background:#FFFFFF; padding:4px;" />
             <div style="font-size:1.15rem; font-weight:700; margin-top:8px;">Confirmación</div>
             <div style="font-size:0.8rem; opacity:0.8;">Paz y Bien • ERP Parroquial</div>
         </div>
@@ -518,7 +518,7 @@ if pagina == "📊 Resumen General":
     b64_portada = _img_b64("assets/portada.jpg")
     if b64_portada:
         st.markdown(
-            f'<img src="data:image/jpeg;base64,{b64_portada}" '
+            f'<img src="{b64_portada}" '
             f'style="width:100%; max-height:260px; object-fit:cover; border-radius:18px; '
             f'margin-bottom:18px; box-shadow:0 6px 18px rgba(46,32,24,0.10);" />',
             unsafe_allow_html=True,
