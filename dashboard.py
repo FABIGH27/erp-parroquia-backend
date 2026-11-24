@@ -13,19 +13,26 @@ st.set_page_config(page_title="ERP Parroquia - Confirmación", layout="wide")
 
 import base64
 
-def _img_b64(ruta: str) -> str:
-    if not os.path.exists(ruta):
-        return ""
-    with open(ruta, "rb") as f:
-        return base64.b64encode(f.read()).decode()
+def _img_b64(ruta: str) -> tuple:
+    carpeta = os.path.dirname(ruta) or "."
+    nombre_base = os.path.splitext(os.path.basename(ruta))[0].lower()
+    if os.path.isdir(carpeta):
+        for archivo in os.listdir(carpeta):
+            base_a, ext_a = os.path.splitext(archivo)
+            ext_low = ext_a.lower()
+            if base_a.lower() == nombre_base and ext_low in [".jpg", ".jpeg", ".png", ".webp"]:
+                mime = "image/png" if ext_low == ".png" else ("image/webp" if ext_low == ".webp" else "image/jpeg")
+                with open(os.path.join(carpeta, archivo), "rb") as f:
+                    return f"data:{mime};base64,{base64.b64encode(f.read()).decode()}"
+    return ""
 
 def mostrar_encabezado_modulo(titulo: str, subtitulo: str, ruta_icono: str):
-    b64 = _img_b64(ruta_icono)
+    uri = _img_b64(ruta_icono)
     icono_html = (
-        f'<img src="data:image/jpeg;base64,{b64}" '
-        f'style="width:58px; height:58px; object-fit:cover; border-radius:14px; '
+        f'<img src="{uri}" '
+        f'style="width:58px; height:58px; object-fit:contain; background:#FFFFFF; padding:4px; border-radius:14px; '
         f'border:2px solid #EADFD3; box-shadow:0 3px 8px rgba(46,32,24,0.12);" />'
-        if b64 else ""
+        if uri else ""
     )
     html = (
         f'<div style="display:flex; align-items:center; gap:16px; margin-bottom:14px;">'
@@ -122,6 +129,35 @@ def aplicar_estilo_franciscano():
         color: #9C6644 !important;
         border-top: 3px solid #9C6644 !important;
     }
+    
+    /* Fuente Times New Roman en todo el sistema */
+    html, body, .stApp, [class*="css"], h1, h2, h3, h4, p, label, input, button, textarea, select {
+        font-family: "Times New Roman", Times, Georgia, serif !important;
+    }
+
+    /* Cuadro de usuario logueado en el Sidebar */
+    [data-testid="stSidebar"] [data-testid="stAlert"] {
+        background-color: #3E2C22 !important;
+        border: 1px solid #9C6644 !important;
+        border-radius: 12px !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stAlert"] * {
+        color: #F5EFE6 !important;
+    }
+
+    /* Botón de Cerrar Sesión en el Sidebar */
+    [data-testid="stSidebar"] .stButton > button {
+        background-color: #3E2C22 !important;
+        color: #F5EFE6 !important;
+        border: 1px solid #9C6644 !important;
+        border-radius: 10px !important;
+        font-weight: 600 !important;
+    }
+    [data-testid="stSidebar"] .stButton > button:hover {
+        background-color: #9C6644 !important;
+        color: #FFFFFF !important;
+    }
+    
     </style>
     """, unsafe_allow_html=True)
 
@@ -1216,7 +1252,7 @@ elif pagina == "📁 Secretaría":
     mostrar_encabezado_modulo(
         "Módulo de Secretaría",
         "Control de expedientes y documentos requisito",
-        "assets/paloma.jpg",
+        "assets/corazon.jpg",
     )
 
     tab_exp, tab_docs = st.tabs(["📋 Control de Expedientes", "⚙️ Catálogo de Documentos Requisito"])
@@ -1342,8 +1378,11 @@ elif pagina == "📁 Secretaría":
 # SECCIÓN 5.5: ASIGNACIÓN DE GRUPOS Y SALONES (SOLO ADMIN)
 # =========================================================
 elif pagina == "🏫 Grupos y Salones":
-    st.title("🏫 Asignación de Grupos y Salones")
-    st.caption("Organiza a los catequizandos por rangos de letras (A–Z) según su apellido o ajústalos manualmente.")
+    mostrar_encabezado_modulo(
+        "Asignación de Grupos y Salones",
+        "Organiza a los catequizandos por rangos de letras (A–Z) según su apellido o ajústalos manualmente.",
+        "assets/paloma.jpg",
+    )
 
     resp_j = requests.get(f"{API_URL}/api/v1/catequizandos", timeout=15)
     lista_j = resp_j.json() if resp_j.status_code == 200 else []
