@@ -8,6 +8,7 @@ from fpdf import FPDF
 import json
 import os
 import base64
+import altair as alt
 
 st.set_page_config(page_title="ERP Parroquia - Confirmación", layout="wide")
 
@@ -46,6 +47,19 @@ def mostrar_encabezado_modulo(titulo: str, subtitulo: str, ruta_icono: str):
 
 def aplicar_estilo_franciscano():
     st.markdown("""
+    
+    /* Notificaciones informativas (st.info) en paleta franciscana */
+    [data-testid="stAlert"] {
+        background-color: #EFE6DA !important;
+        border: 1px solid #D4A373 !important;
+        border-left: 5px solid #9C6644 !important;
+        border-radius: 12px !important;
+        color: #2E2018 !important;
+    }
+    [data-testid="stAlert"] * {
+        color: #2E2018 !important;
+    }
+    
     <style>
     /* Fondo crema cálido */
     .stApp {
@@ -541,29 +555,94 @@ if pagina == "📊 Resumen General":
             col3.metric("Total Recaudado (S/)", f"S/ {kpis['total_recaudado']:.2f}")
 
             st.divider()
+            resp_alertas = requests.get(f"{API_URL}/api/v1/dashboard/alertas", timeout=20)
+            alertas = resp_alertas.json() if resp_alertas.status_code == 200 else {}
+            deudores = alertas.get("deudores", [])
+            docs_pend = alertas.get("documentos_pendientes", [])
+            asis_res = alertas.get("asistencias_resumen", [])
+
+            r_conc = requests.get(f"{API_URL}/api/v1/tesoreria/conceptos", timeout=15)
+            lista_conceptos = [c["nombre_conc"] for c in r_conc.json()] if r_conc.status_code == 200 else []
+
+            r_docs = requests.get(f"{API_URL}/api/v1/secretaria/documentos", timeout=15)
+            lista_docs = [d["nombre_doc"] for d in r_docs.json()] if r_docs.status_code == 200 else []
+
+            total_cat = kpis["total_catequizandos"]
+
+
+            def _grafico_dona(df_datos: pd.DataFrame, dominio: list, rango_colores: list):
+                return (
+                    alt.Chart(df_datos)
+                    .mark_arc(innerRadius=58, outerRadius=105, stroke="#FFFFFF", strokeWidth=2)
+                    .encode(
+                        theta=alt.Theta(field="Cantidad", type="quantitative"),
+                        color=alt.Color(
+                            field="Estado",
+                            type="nominal",
+                            scale=alt.Scale(domain=dominio, range=rango_colores),
+                            legend=alt.Legend(orient="bottom", title=None, labelColor="#2E2018", labelFontSize=13)
+                        ),
+                        tooltip=["Estado", "Cantidad", "Porcentaje"]
+                    )
+                    .properties(height=270, background="transparent")
+                    .configure_view(strokeWidth=0)
+                )
+
+
             c1, c2 = st.columns(2)
+
+            # --- GRÁFICO 1: PAGOS POR CONCEPTO ---
             with c1:
-                st.subheader("Recaudación por Método de Pago")
-                if datos["recaudacion_por_metodo"]:
-                    st.bar_chart(datos["recaudacion_por_metodo"])
+                st.subheader("💰 Estado de Pagos por Concepto")
+                if lista_conceptos and total_cat > 0:
+                    conc_sel = st.selectbox("Selecciona el concepto:", lista_conceptos, key="graf_conc_sel")
+                    no_pagaron = sum(1 for d in deudores if d.get("Concepto") == conc_sel)
+                    pagaron = max(0, total_cat - no_pagaron)
+
+                    df_g1 = pd.DataFrame([
+                        {"Estado": "Pagaron", "Cantidad": pagaron, "Porcentaje": f"{(pagaron / total_cat) * 100:.1f}%"},
+                        {"Estado": "Pendientes", "Cantidad": no_pagaron,
+                         "Porcentaje": f"{(no_pagaron / total_cat) * 100:.1f}%"},
+                    ])
+                    st.altair_chart(_grafico_dona(df_g1, ["Pagaron", "Pendientes"], ["#9C6644", "#E6D5C3"]),
+                                    use_container_width=True)
+                    st.caption(f"**{pagaron}** pagaron • **{no_pagaron}** pendientes (de {total_cat} inscritos)")
                 else:
-                    st.caption("Sin pagos registrados aún.")
+                    st.info("Aún no hay conceptos de pago o catequizandos registrados.")
+
+            # --- GRÁFICO 2: EXPEDIENTES POR DOCUMENTO ---
             with c2:
-                st.subheader("Estado de Expedientes")
-                if datos["estado_expedientes"]:
-                    st.bar_chart(datos["estado_expedientes"])
+                st.subheader("📁 Expedientes por Documento")
+                if lista_docs and total_cat > 0:
+                    doc_sel = st.selectbox("Selecciona el documento requisito:", lista_docs, key="graf_doc_sel")
+                    pend_doc = [d for d in docs_pend if d.get("Documento") == doc_sel]
+                    observados = sum(1 for d in pend_doc if d.get("Estado") == "Observado")
+                    faltantes = len(pend_doc) - observados
+                    entregados = max(0, total_cat - len(pend_doc))
+
+                    df_g2 = pd.DataFrame([
+                        {"Estado": "Entregado", "Cantidad": entregados,
+                         "Porcentaje": f"{(entregados / total_cat) * 100:.1f}%"},
+                        {"Estado": "Observado", "Cantidad": observados,
+                         "Porcentaje": f"{(observados / total_cat) * 100:.1f}%"},
+                        {"Estado": "Pendiente", "Cantidad": faltantes,
+                         "Porcentaje": f"{(faltantes / total_cat) * 100:.1f}%"},
+                    ])
+                    df_g2 = df_g2[df_g2["Cantidad"] > 0]
+                    st.altair_chart(
+                        _grafico_dona(df_g2, ["Entregado", "Observado", "Pendiente"],
+                                      ["#7F4F24", "#D4A373", "#E6D5C3"]),
+                        use_container_width=True
+                    )
+                    st.caption(
+                        f"**{entregados}** entregados • **{observados}** observados • **{faltantes}** pendientes")
                 else:
-                    st.caption("Sin expedientes registrados aún.")
+                    st.info("Aún no hay documentos requisito o catequizandos registrados.")
+
             st.divider()
             st.subheader("🚨 Panel de Alertas y Seguimiento")
 
-            resp_alertas = requests.get(f"{API_URL}/api/v1/dashboard/alertas", timeout=20)
             if resp_alertas.status_code == 200:
-                alertas = resp_alertas.json()
-                deudores = alertas.get("deudores", [])
-                docs_pend = alertas.get("documentos_pendientes", [])
-                asis_res = alertas.get("asistencias_resumen", [])
-
                 tab_a1, tab_a2, tab_a3 = st.tabs([
                     f"💸 Pagos Pendientes ({len(deudores)})",
                     f"📄 Docs. Faltantes / Observados ({len(docs_pend)})",
