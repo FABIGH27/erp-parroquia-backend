@@ -6,8 +6,129 @@ from io import BytesIO
 from datetime import datetime
 from fpdf import FPDF
 import json
+import os
+import base64
 
 st.set_page_config(page_title="ERP Parroquia - Confirmación", layout="wide")
+
+import base64
+
+def _img_b64(ruta: str) -> str:
+    if not os.path.exists(ruta):
+        return ""
+    with open(ruta, "rb") as f:
+        return base64.b64encode(f.read()).decode()
+
+def mostrar_encabezado_modulo(titulo: str, subtitulo: str, ruta_icono: str):
+    b64 = _img_b64(ruta_icono)
+    icono_html = (
+        f'<img src="data:image/jpeg;base64,{b64}" '
+        f'style="width:58px; height:58px; object-fit:cover; border-radius:14px; '
+        f'border:2px solid #EADFD3; box-shadow:0 3px 8px rgba(46,32,24,0.12);" />'
+        if b64 else ""
+    )
+    st.markdown(
+        f"""
+        <div style="display:flex; align-items:center; gap:16px; margin-bottom:14px;">
+            {icono_html}
+            <div>
+                <h1 style="margin:0; font-size:2rem; color:#2E2018; line-height:1.15;">{titulo}</h1>
+                <p style="margin:4px 0 0 0; color:#7A5C48; font-size:0.95rem;">{subtitulo}</p>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+def aplicar_estilo_franciscano():
+    st.markdown("""
+    <style>
+    /* Fondo crema cálido */
+    .stApp {
+        background-color: #F5EFE6;
+        color: #2E2018;
+    }
+
+    /* Sidebar café espresso */
+    [data-testid="stSidebar"] {
+        background-color: #2B1E17;
+        border-right: 1px solid #3E2C22;
+    }
+    [data-testid="stSidebar"] * {
+        color: #F5EFE6 !important;
+    }
+    [data-testid="stSidebar"] .stRadio > div {
+        gap: 6px;
+    }
+    [data-testid="stSidebar"] .stRadio label {
+        padding: 8px 12px;
+        border-radius: 10px;
+        transition: background 0.2s ease;
+    }
+    [data-testid="stSidebar"] .stRadio label:hover {
+        background-color: #3E2C22;
+    }
+    [data-testid="stSidebar"] .stRadio label:has(input:checked) {
+        background-color: #9C6644 !important;
+        font-weight: 600;
+    }
+
+    /* Tarjetas de KPIs blancas con sombra suave */
+    [data-testid="stMetric"] {
+        background-color: #FFFFFF;
+        padding: 18px 20px;
+        border-radius: 16px;
+        border: 1px solid #EADFD3;
+        box-shadow: 0 4px 12px rgba(46, 32, 24, 0.05);
+    }
+    [data-testid="stMetricLabel"] {
+        color: #7A5C48 !important;
+        font-weight: 600 !important;
+    }
+    [data-testid="stMetricValue"] {
+        color: #2E2018 !important;
+    }
+
+    /* Tarjetas para formularios y expanders */
+    [data-testid="stForm"], [data-testid="stExpander"] {
+        background-color: #FFFFFF;
+        border-radius: 16px;
+        border: 1px solid #EADFD3;
+        box-shadow: 0 4px 12px rgba(46, 32, 24, 0.04);
+    }
+
+    /* Botones primarios caramelo/tierra */
+    .stButton > button[kind="primary"], .stFormSubmitButton > button {
+        background-color: #9C6644 !important;
+        color: #FFFFFF !important;
+        border: none !important;
+        border-radius: 10px !important;
+        font-weight: 600 !important;
+    }
+    .stButton > button[kind="primary"]:hover, .stFormSubmitButton > button:hover {
+        background-color: #7F4F24 !important;
+    }
+
+    /* Pestañas estilo tarjeta */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        background-color: #EDE3D7;
+        border-radius: 10px 10px 0 0;
+        padding: 8px 16px;
+        color: #4A3528;
+        font-weight: 600;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #FFFFFF !important;
+        color: #9C6644 !important;
+        border-top: 3px solid #9C6644 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+aplicar_estilo_franciscano()
 
 API_URL = "https://erp-parroquia-api.onrender.com"
 
@@ -217,9 +338,19 @@ if "acceso_temporal" not in st.session_state:
 if not st.session_state["admin_logueado"]:
     col_izq, col_centro, col_der = st.columns([1, 2, 1])
     with col_centro:
-        st.title("⛪ ERP Parroquial - Confirmación")
-        st.subheader("🔒 Inicio de Sesión Administrativo")
-        st.caption("Ingresa con tu cuenta de Coordinador, Secretario, Tesorero o Vocal.")
+        b64_portada = _img_b64("assets/portada.jpg")
+        if b64_portada:
+            st.markdown(
+                f'<img src="data:image/jpeg;base64,{b64_portada}" '
+                f'style="width:100%; border-radius:18px; margin-bottom:14px; '
+                f'box-shadow:0 6px 18px rgba(46,32,24,0.14);" />',
+                unsafe_allow_html=True,
+            )
+        st.markdown(
+            "<h3 style='text-align:center; color:#2E2018; margin-bottom:2px;'>🔒 Inicio de Sesión Administrativo</h3>"
+            "<p style='text-align:center; color:#7A5C48; font-size:0.9rem;'>Ingresa con tu cuenta de Coordinador, Secretario, Tesorero, Vocal o Catequista.</p>",
+            unsafe_allow_html=True,
+        )
 
         with st.form("login_general_form"):
             dni_input = st.text_input("DNI de Usuario")
@@ -251,7 +382,22 @@ if not st.session_state["admin_logueado"]:
 # =========================================================
 # MENÚ LATERAL (SIDEBAR) CON PERMISOS POR ROL (RBAC)
 # =========================================================
-st.sidebar.title("⛪ ERP Parroquia")
+b64_tau = _img_b64("assets/tau.jpg")
+if b64_tau:
+    st.sidebar.markdown(
+        f"""
+        <div style="text-align:center; padding:8px 0 12px 0;">
+            <img src="data:image/jpeg;base64,{b64_tau}"
+                 style="width:92px; height:92px; object-fit:cover; border-radius:50%;
+                        border:2px solid #9C6644; background:#FFFFFF; padding:4px;" />
+            <div style="font-size:1.15rem; font-weight:700; margin-top:8px;">Confirmación</div>
+            <div style="font-size:0.8rem; opacity:0.8;">Paz y Bien • ERP Parroquial</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+else:
+    st.sidebar.title("⛪ ERP Parroquia")
 st.sidebar.success(f"👤 {st.session_state['admin_info']}")
 
 rol_actual = st.session_state.get("admin_rol", "").strip().lower()
@@ -320,7 +466,30 @@ if st.sidebar.button("🚪 Cerrar sesión", use_container_width=True):
 # SECCIÓN 1: RESUMEN GENERAL (KPIs)
 # =========================================================
 if pagina == "📊 Resumen General":
-    st.title("📊 Dashboard Administrativo - Confirmación")
+    fecha_hoy = datetime.now().strftime("%d/%m/%Y")
+    st.markdown(
+        f"""
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; margin-bottom:12px;">
+                <div>
+                    <div style="color:#7A5C48; font-size:0.95rem;">Paz y Bien, {st.session_state['admin_info']}</div>
+                    <h1 style="margin:0; color:#2E2018;">Panel de Confirmación</h1>
+                </div>
+                <div style="background:#FFFFFF; border:1px solid #EADFD3; border-radius:20px; padding:6px 16px; font-weight:600; color:#4A3528;">
+                    📅 {fecha_hoy}
+                </div>
+            </div>
+            """,
+        unsafe_allow_html=True,
+    )
+
+    b64_portada = _img_b64("assets/portada.jpg")
+    if b64_portada:
+        st.markdown(
+            f'<img src="data:image/jpeg;base64,{b64_portada}" '
+            f'style="width:100%; max-height:260px; object-fit:cover; border-radius:18px; '
+            f'margin-bottom:18px; box-shadow:0 6px 18px rgba(46,32,24,0.10);" />',
+            unsafe_allow_html=True,
+        )
 
     try:
         resp = requests.get(f"{API_URL}/api/v1/dashboard/resumen", timeout=15)
@@ -441,7 +610,11 @@ if pagina == "📊 Resumen General":
 # SECCIÓN 1.5: VISUALIZADOR GENERAL (FICHA INTEGRAL)
 # =========================================================
 elif pagina == "🔎 Visualizador General":
-    st.title("🔎 Visualizador General de Catequizando")
+    mostrar_encabezado_modulo(
+        "Visualizador General",
+        "Ficha integral de datos, asistencias, pagos y documentos",
+        "assets/custodia.jpg",
+    )
     st.caption("Consulta en un solo lugar los datos personales, asistencias detalladas, pagos y documentos.")
 
     resp_lista = requests.get(f"{API_URL}/api/v1/catequizandos", timeout=15)
@@ -590,7 +763,11 @@ elif pagina == "🔎 Visualizador General":
 # SECCIÓN 2: DIRECTORIO DE CATEQUIZANDOS
 # =========================================================
 elif pagina == "👥 Directorio de Catequizandos":
-    st.title("👥 Directorio de Catequizandos")
+    mostrar_encabezado_modulo(
+        "Directorio de Catequizandos",
+        "Registro, carnets QR y gestión de jóvenes",
+        "assets/san_francisco.jpg",
+    )
 
     with st.expander("➕ Registrar Nuevo Catequizando"):
         with st.form("form_nuevo_catequizando", clear_on_submit=True):
@@ -822,7 +999,11 @@ elif pagina == "👥 Directorio de Catequizandos":
 # SECCIÓN 3: CONTROL DE ASISTENCIAS (3 PESTAÑAS)
 # =========================================================
 elif pagina == "📋 Control de Asistencias":
-    st.title("📋 Control de Asistencias")
+    mostrar_encabezado_modulo(
+        "Control de Asistencias",
+        "Seguimiento de los temas, misas y actividades parroquiales",
+        "assets/llama.jpg",
+    )
 
     tab1, tab2, tab3 = st.tabs(["📖 Catequesis (26 Temas)", "⛪ Misas (30 Misas)", "🎉 Actividades Parroquiales"])
 
@@ -908,7 +1089,11 @@ elif pagina == "📋 Control de Asistencias":
 # SECCIÓN 4: TESORERÍA
 # =========================================================
 elif pagina == "💰 Tesorería":
-    st.title("💰 Módulo de Tesorería")
+    mostrar_encabezado_modulo(
+        "Módulo de Tesorería",
+        "Control de aportes, conceptos y recaudación",
+        "assets/corazon.jpg",
+    )
 
     tab_pagos, tab_conceptos = st.tabs(["💵 Registro de Pagos", "⚙️ Catálogo de Conceptos de Pago"])
 
@@ -1031,7 +1216,11 @@ elif pagina == "💰 Tesorería":
 # SECCIÓN 5: SECRETARÍA
 # =========================================================
 elif pagina == "📁 Secretaría":
-    st.title("📁 Módulo de Secretaría - Expedientes")
+    mostrar_encabezado_modulo(
+        "Módulo de Secretaría",
+        "Control de expedientes y documentos requisito",
+        "assets/paloma.jpg",
+    )
 
     tab_exp, tab_docs = st.tabs(["📋 Control de Expedientes", "⚙️ Catálogo de Documentos Requisito"])
 
