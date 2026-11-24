@@ -27,18 +27,15 @@ def mostrar_encabezado_modulo(titulo: str, subtitulo: str, ruta_icono: str):
         f'border:2px solid #EADFD3; box-shadow:0 3px 8px rgba(46,32,24,0.12);" />'
         if b64 else ""
     )
-    st.markdown(
-        f"""
-        <div style="display:flex; align-items:center; gap:16px; margin-bottom:14px;">
-            {icono_html}
-            <div>
-                <h1 style="margin:0; font-size:2rem; color:#2E2018; line-height:1.15;">{titulo}</h1>
-                <p style="margin:4px 0 0 0; color:#7A5C48; font-size:0.95rem;">{subtitulo}</p>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    html = (
+        f'<div style="display:flex; align-items:center; gap:16px; margin-bottom:14px;">'
+        f'{icono_html}'
+        f'<div>'
+        f'<h1 style="margin:0; font-size:2rem; color:#2E2018; line-height:1.15;">{titulo}</h1>'
+        f'<p style="margin:4px 0 0 0; color:#7A5C48; font-size:0.95rem;">{subtitulo}</p>'
+        f'</div></div>'
     )
+    st.markdown(html, unsafe_allow_html=True)
 
 def aplicar_estilo_franciscano():
     st.markdown("""
