@@ -1331,7 +1331,16 @@ def importar_catequizandos_masivo(lista: List[schemas.CatequizandoCreate], db: S
             dni=dni_limpio,
             nombres=item.nombres.strip(),
             apellidos=item.apellidos.strip(),
-            qr_token=f"CAT-{dni_limpio}"
+            qr_token=f"CAT-{dni_limpio}",
+            colegio=(item.colegio or "").strip() or None,
+            estado_bautismo=(item.estado_bautismo or "").strip() or "Bautizado",
+            celular_joven=(item.celular_joven or "").strip() or None,
+            celular_apoderado_1=(item.celular_apoderado_1 or "").strip() or None,
+            parentesco_apoderado_1=(item.parentesco_apoderado_1 or "").strip() or None,
+            celular_apoderado_2=(item.celular_apoderado_2 or "").strip() or None,
+            parentesco_apoderado_2=(item.parentesco_apoderado_2 or "").strip() or None,
+            grupo=(item.grupo or "").strip() or None,
+            salon=(item.salon or "").strip() or None,
         )
         db.add(nuevo)
         creados += 1

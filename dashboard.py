@@ -2049,38 +2049,79 @@ elif pagina == "💾 Respaldo y Restauración":
 
     with tab_imp:
         st.subheader("Importación Masiva de Catequizandos desde Excel")
-        st.caption("El archivo Excel debe tener exactamente las columnas: **DNI**, **Nombres**, **Apellidos**.")
+        st.caption(
+            "Columnas obligatorias: **DNI**, **Nombres**, **Apellidos**. "
+            "Columnas opcionales: **Colegio**, **Bautismo**, **Celular Joven**, **Celular Apoderado 1**, "
+            "**Parentesco Apoderado 1**, **Celular Apoderado 2**, **Parentesco Apoderado 2**, **Grupo**, **Salón**."
+        )
 
-        # Plantilla descargable
+        # Plantilla descargable completa
         df_plantilla = pd.DataFrame([
-            {"DNI": "12345678", "Nombres": "Juan Carlos", "Apellidos": "Perez Quispe"}
+            {
+                "DNI": "12345678",
+                "Nombres": "Juan Carlos",
+                "Apellidos": "Perez Quispe",
+                "Colegio": "Mercedes",
+                "Bautismo": "Bautizado",
+                "Celular Joven": "987654321",
+                "Celular Apoderado 1": "912345678",
+                "Parentesco Apoderado 1": "Mamá - María",
+                "Celular Apoderado 2": "955443322",
+                "Parentesco Apoderado 2": "Papá - Juan",
+                "Grupo": "Grupo A",
+                "Salón": "Salón 1",
+            }
         ])
         st.download_button(
-            label="📄 Descargar Plantilla Excel de Ejemplo",
+            label="📄 Descargar Plantilla Excel Completa",
             data=generar_excel(df_plantilla),
-            file_name="plantilla_catequizandos.xlsx",
+            file_name="plantilla_catequizandos_completa.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
         archivo_xlsx = st.file_uploader("Sube tu archivo Excel (.xlsx)", type=["xlsx"])
         if archivo_xlsx is not None:
             try:
-                df_imp = pd.read_excel(archivo_xlsx, dtype={"DNI": str})
+                # Leer todo como texto para evitar que Excel agregue '.0' a DNIs o celulares
+                df_imp = pd.read_excel(archivo_xlsx, dtype=str)
+                df_imp.columns = [c.strip() for c in df_imp.columns]
+
                 columnas_req = {"DNI", "Nombres", "Apellidos"}
                 if not columnas_req.issubset(set(df_imp.columns)):
-                    st.error("El Excel debe contener las columnas exactas: DNI, Nombres, Apellidos.")
+                    st.error("El Excel debe contener al menos las columnas exactas: DNI, Nombres, Apellidos.")
                 else:
                     st.dataframe(df_imp.head(20), use_container_width=True, hide_index=True)
                     st.caption(f"Total de filas detectadas: **{len(df_imp)}**")
+
+                    def _celda(row, col_nombre, default=None):
+                        if col_nombre not in row.index:
+                            return default
+                        val = row[col_nombre]
+                        if pd.isna(val):
+                            return default
+                        texto = str(val).strip()
+                        return texto if texto and texto.lower() != "nan" else default
+
                     if st.button("📥 Importar Catequizandos", type="primary"):
-                        payload = [
-                            {
-                                "dni": str(row["DNI"]).strip().zfill(8),
+                        payload = []
+                        for _, row in df_imp.dropna(subset=["DNI", "Nombres", "Apellidos"]).iterrows():
+                            dni_val = str(row["DNI"]).strip().split(".")[0].zfill(8)
+                            salon_val = _celda(row, "Salón") or _celda(row, "Salon")
+                            payload.append({
+                                "dni": dni_val,
                                 "nombres": str(row["Nombres"]).strip(),
-                                "apellidos": str(row["Apellidos"]).strip()
-                            }
-                            for _, row in df_imp.dropna(subset=["DNI", "Nombres", "Apellidos"]).iterrows()
-                        ]
+                                "apellidos": str(row["Apellidos"]).strip(),
+                                "colegio": _celda(row, "Colegio"),
+                                "estado_bautismo": _celda(row, "Bautismo", "Bautizado"),
+                                "celular_joven": _celda(row, "Celular Joven"),
+                                "celular_apoderado_1": _celda(row, "Celular Apoderado 1"),
+                                "parentesco_apoderado_1": _celda(row, "Parentesco Apoderado 1"),
+                                "celular_apoderado_2": _celda(row, "Celular Apoderado 2"),
+                                "parentesco_apoderado_2": _celda(row, "Parentesco Apoderado 2"),
+                                "grupo": _celda(row, "Grupo"),
+                                "salon": salon_val,
+                            })
+
                         with st.spinner("Importando catequizandos..."):
                             r_imp = requests.post(
                                 f"{API_URL}/api/v1/admin/importar/catequizandos",
@@ -2089,7 +2130,10 @@ elif pagina == "💾 Respaldo y Restauración":
                             )
                         if r_imp.status_code == 200:
                             res = r_imp.json()
-                            st.success(f"Importación terminada: **{res['creados']}** creados, **{res['omitidos']}** omitidos (duplicados o DNI inválido).")
+                            st.success(
+                                f"Importación terminada: **{res['creados']}** creados, "
+                                f"**{res['omitidos']}** omitidos (duplicados o DNI inválido)."
+                            )
                         else:
                             st.error(f"Error ({r_imp.status_code}): {r_imp.text}")
             except Exception as e:
