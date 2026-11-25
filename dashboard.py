@@ -17,7 +17,19 @@ def ahora_peru() -> datetime:
 
 st.set_page_config(page_title="ERP Parroquia - Confirmación", layout="wide")
 
-import base64
+@st.cache_data(show_spinner=False)
+def _img_b64(ruta: str) -> str:
+    carpeta = os.path.dirname(ruta) or "."
+    nombre_base = os.path.splitext(os.path.basename(ruta))[0].lower()
+    if os.path.isdir(carpeta):
+        for archivo in os.listdir(carpeta):
+            base_a, ext_a = os.path.splitext(archivo)
+            ext_low = ext_a.lower()
+            if base_a.lower() == nombre_base and ext_low in [".jpg", ".jpeg", ".png", ".webp"]:
+                mime = "image/png" if ext_low == ".png" else ("image/webp" if ext_low == ".webp" else "image/jpeg")
+                with open(os.path.join(carpeta, archivo), "rb") as f:
+                    return f"data:{mime};base64,{base64.b64encode(f.read()).decode()}"
+    return ""
 
 def _img_b64(ruta: str) -> tuple:
     carpeta = os.path.dirname(ruta) or "."
@@ -195,9 +207,14 @@ aplicar_estilo_franciscano()
 
 API_URL = "https://erp-parroquia-api.onrender.com"
 
+@st.cache_resource
+def get_http_session():
+    session = requests.Session()
+    return session
+
 @st.cache_data(ttl=45, show_spinner=False)
 def _api_get_cached(ruta: str, params=None):
-    r = requests.get(f"{API_URL}{ruta}", params=params, timeout=30)
+    r = get_http_session().get(f"{API_URL}{ruta}", params=params, timeout=30)
     r.raise_for_status()
     return r.json()
 
@@ -1018,29 +1035,34 @@ elif pagina == "👥 Directorio de Catequizandos":
             df = pd.DataFrame(lista)
 
             # Filtros rápidos (buscador + colegio + bautismo)
-            f1, f2, f3 = st.columns([2, 1.2, 1.2])
-            busqueda = f1.text_input("🔍 Buscar por DNI, nombre, apellido o celular:", key="busq_cat_dir")
-            filtro_colegio = f2.selectbox("Colegio", ["Todos"] + COLEGIOS_PARROQUIA, key="filt_col_dir")
-            filtro_bautismo = f3.selectbox("Bautismo", ["Todos"] + ESTADOS_BAUTISMO, key="filt_baut_dir")
+            @st.fragment
+            def _tabla_directorio(df_base):
+                f1, f2, f3 = st.columns([2, 1.2, 1.2])
+                busqueda = f1.text_input("🔍 Buscar por DNI, nombre, apellido o celular:", key="busq_cat_dir")
+                filtro_colegio = f2.selectbox("Colegio", ["Todos"] + COLEGIOS_PARROQUIA, key="filt_col_dir")
+                filtro_bautismo = f3.selectbox("Bautismo", ["Todos"] + ESTADOS_BAUTISMO, key="filt_baut_dir")
 
-            df_filtrado = df.copy()
-            if busqueda.strip():
-                q = busqueda.strip().lower()
-                df_filtrado = df_filtrado[
-                    df_filtrado.apply(lambda row: q in row.astype(str).str.lower().to_string(), axis=1)
-                ]
-            if filtro_colegio != "Todos" and "Colegio" in df_filtrado.columns:
-                df_filtrado = df_filtrado[df_filtrado["Colegio"] == filtro_colegio]
-            if filtro_bautismo != "Todos" and "Bautismo" in df_filtrado.columns:
-                df_filtrado = df_filtrado[df_filtrado["Bautismo"] == filtro_bautismo]
+                df_filtrado = df_base.copy()
+                if busqueda.strip():
+                    q = busqueda.strip().lower()
+                    df_filtrado = df_filtrado[
+                        df_filtrado.apply(lambda row: q in row.astype(str).str.lower().to_string(), axis=1)
+                    ]
+                if filtro_colegio != "Todos" and "Colegio" in df_filtrado.columns:
+                    df_filtrado = df_filtrado[df_filtrado["Colegio"] == filtro_colegio]
+                if filtro_bautismo != "Todos" and "Bautismo" in df_filtrado.columns:
+                    df_filtrado = df_filtrado[df_filtrado["Bautismo"] == filtro_bautismo]
 
-            # Ocultar columnas técnicas *_raw en la tabla y exportación
-            cols_visibles = [c for c in df_filtrado.columns if not c.endswith("_raw")]
-            df_mostrar = df_filtrado[cols_visibles]
+                cols_visibles = [c for c in df_filtrado.columns if not c.endswith("_raw")]
+                df_mostrar = df_filtrado[cols_visibles]
 
-            st.caption(f"Mostrando **{len(df_mostrar)}** de **{len(df)}** catequizandos.")
-            st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
-            mostrar_botones_exportacion(df_mostrar, "directorio_catequizandos", "Directorio de Catequizandos")
+                st.caption(f"Mostrando **{len(df_mostrar)}** de **{len(df_base)}** catequizandos.")
+                st.dataframe(df_mostrar, use_container_width=True, hide_index=True)
+                mostrar_botones_exportacion(df_mostrar, "directorio_catequizandos", "Directorio de Catequizandos")
+                st.session_state["dnis_directorio_filtrados"] = set(df_mostrar["DNI"].tolist())
+
+
+            _tabla_directorio(df)
 
             st.divider()
             st.subheader("🎫 Carnet QR Individual")
@@ -1090,7 +1112,7 @@ elif pagina == "👥 Directorio de Catequizandos":
 
                 alumnos_a_imprimir = []
                 if modo_bloque == "Todos los catequizandos filtrados en la tabla superior":
-                    dnis_filtrados = set(df_mostrar["DNI"].tolist())
+                    dnis_filtrados = st.session_state.get("dnis_directorio_filtrados", set(df["DNI"].tolist()))
                     alumnos_a_imprimir = [j for j in lista if j["DNI"] in dnis_filtrados]
                 else:
                     opciones_multi = {f"{j['Nombres']} {j['Apellidos']} (DNI: {j['DNI']})": j for j in lista}
@@ -1198,6 +1220,7 @@ elif pagina == "📋 Control de Asistencias":
 
     tab1, tab2, tab3 = st.tabs(["📖 Catequesis (26 Temas)", "⛪ Misas (30 Misas)", "🎉 Actividades Parroquiales"])
 
+    @st.fragment
     def mostrar_tabla_asistencias(tipo_filtro, etiqueta_detalle, opciones_detalle):
         registros = api_get("/api/v1/asistencias", {"tipo": tipo_filtro})
         if registros is not None:
