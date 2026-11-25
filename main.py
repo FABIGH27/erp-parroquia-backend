@@ -156,6 +156,12 @@ def obtener_balance_caja(usuario_actual: models.Usuario = Depends(requerir_rol_t
 # MÓDULO LOGÍSTICO Y ASISTENCIA (QR)
 # =========================================================
 PERU_TZ = timezone(timedelta(hours=-5))
+def _a_hora_peru(dt) -> str:
+    if not dt:
+        return "-"
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(PERU_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
 @app.post("/api/v1/asistencia", tags=["Logística y Escáner QR"])
 def registrar_asistencia(request: schemas.AsistenciaQRRequest, db: Session = Depends(get_db)):
@@ -422,7 +428,7 @@ def listar_pagos(db: Session = Depends(get_db)):
                 "codigo_boleta": r.codigo_boleta or "-",
                 "monto": float(r.monto),
                 "metodo_pago": r.metodo_pago,
-                "fecha_hora": r.fecha_hora,
+                "fecha_hora": _a_hora_peru(r.fecha_hora),
                 "registrado_por": r.registrado_por or "Sistema"
             }
             for r in registros
@@ -718,7 +724,7 @@ def listar_asistencias(tipo: str | None = None, db: Session = Depends(get_db)):
             "Actividad": r.detalle_evento or "-",
             "Estado": r.estado or "Presente",
             "Método": r.metodo_registro or "QR",
-            "Fecha y Hora": r.fecha_hora,
+            "Fecha y Hora": _a_hora_peru(r.fecha_hora),
             "Registrado por": r.registrado_por or "Sistema"
         }
         for r in registros
@@ -1462,7 +1468,7 @@ def obtener_ficha_completa(id_cateq: int, db: Session = Depends(get_db)):
             "detalle": a.detalle_evento or "-",
             "estado": a.estado or "Presente",
             "metodo": a.metodo_registro or "QR",
-            "fecha_hora": a.fecha_hora.strftime("%d/%m/%Y %H:%M") if a.fecha_hora else "-",
+            "fecha_hora": _a_hora_peru(a.fecha_hora),
             "registrado_por": a.registrado_por or "Sistema"
         }
         for a in asistencias_db
@@ -1513,7 +1519,7 @@ def obtener_ficha_completa(id_cateq: int, db: Session = Depends(get_db)):
             "Boleta": p.codigo_boleta or "-",
             "Monto (S/)": float(p.monto),
             "Método": p.metodo_pago,
-            "Fecha y Hora": p.fecha_hora.strftime("%d/%m/%Y %H:%M") if p.fecha_hora else "-",
+            "fecha_hora": _a_hora_peru(a.fecha_hora),
             "Registrado por": p.registrado_por or "Sistema"
         }
         for p in pagos_db
