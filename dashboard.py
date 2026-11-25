@@ -195,6 +195,16 @@ aplicar_estilo_franciscano()
 
 API_URL = "https://erp-parroquia-api.onrender.com"
 
+@st.cache_data(ttl=45, show_spinner=False)
+def api_get(ruta: str, params=None):
+    try:
+        r = requests.get(f"{API_URL}{ruta}", params=params, timeout=30)
+        if r.status_code == 200:
+            return r.json()
+    except Exception:
+        pass
+    return None
+
 COLEGIOS_PARROQUIA = [
     "Mercedes",
     "Politécnico",
@@ -522,6 +532,10 @@ if not es_admin:
                 except Exception as e:
                     st.error(f"Error de conexión: {e}")
 
+if st.sidebar.button("🔄 Actualizar datos", use_container_width=True):
+    st.cache_data.clear()
+    st.rerun()
+
 st.sidebar.divider()
 if st.sidebar.button("🚪 Cerrar sesión", use_container_width=True):
     st.session_state["admin_logueado"] = False
@@ -560,9 +574,9 @@ if pagina == "📊 Resumen General":
         )
 
     try:
-        resp = requests.get(f"{API_URL}/api/v1/dashboard/resumen", timeout=15)
-        if resp.status_code == 200:
-            datos = resp.json()
+        res = api_get("/api/v1/dashboard/resumen")
+        if res is not None:
+            datos = res
             kpis = datos["kpis"]
 
             f_asis1, f_asis2, _ = st.columns([1.2, 1.2, 2.6])
@@ -585,12 +599,11 @@ if pagina == "📊 Resumen General":
             if modo_asis in ("Hoy", "Por fecha"):
                 fecha_obj = ahora_peru().date() if modo_asis == "Hoy" else fecha_asis_sel
                 fecha_iso = fecha_obj.strftime("%Y-%m-%d")
-                r_all_asis = requests.get(f"{API_URL}/api/v1/asistencias", timeout=15)
-                if r_all_asis.status_code == 200:
-                    total_asis_mostrar = sum(
-                        1 for a in r_all_asis.json()
-                        if str(a.get("Fecha y Hora", "")).startswith(fecha_iso)
-                    )
+                all_asis = api_get("/api/v1/asistencias") or []
+                total_asis_mostrar = sum(
+                    1 for a in all_asis
+                    if str(a.get("Fecha y Hora", "")).startswith(fecha_iso)
+                )
                 etiqueta_asis = f"Asistencias ({'Hoy' if modo_asis == 'Hoy' else fecha_obj.strftime('%d/%m/%Y')})"
 
             col1, col2, col3 = st.columns(3)
@@ -599,17 +612,13 @@ if pagina == "📊 Resumen General":
             col3.metric("Total Recaudado (S/)", f"S/ {kpis['total_recaudado']:.2f}")
 
             st.divider()
-            resp_alertas = requests.get(f"{API_URL}/api/v1/dashboard/alertas", timeout=20)
-            alertas = resp_alertas.json() if resp_alertas.status_code == 200 else {}
-            deudores = alertas.get("deudores", [])
-            docs_pend = alertas.get("documentos_pendientes", [])
-            asis_res = alertas.get("asistencias_resumen", [])
+            alertas = api_get("/api/v1/dashboard/alertas")
+            deudores = (alertas or {}).get("deudores", [])
+            docs_pend = (alertas or {}).get("documentos_pendientes", [])
+            asis_res = (alertas or {}).get("asistencias_resumen", [])
 
-            r_conc = requests.get(f"{API_URL}/api/v1/tesoreria/conceptos", timeout=15)
-            lista_conceptos = [c["nombre_conc"] for c in r_conc.json()] if r_conc.status_code == 200 else []
-
-            r_docs = requests.get(f"{API_URL}/api/v1/secretaria/documentos", timeout=15)
-            lista_docs = [d["nombre_doc"] for d in r_docs.json()] if r_docs.status_code == 200 else []
+            lista_conceptos = [c["nombre_conc"] for c in (api_get("/api/v1/tesoreria/conceptos") or [])]
+            lista_docs = [d["nombre_doc"] for d in (api_get("/api/v1/secretaria/documentos") or [])]
 
             total_cat = kpis["total_catequizandos"]
 
@@ -686,7 +695,7 @@ if pagina == "📊 Resumen General":
             st.divider()
             st.subheader("🚨 Panel de Alertas y Seguimiento")
 
-            if resp_alertas.status_code == 200:
+            if alertas is not None:
                 tab_a1, tab_a2, tab_a3 = st.tabs([
                     f"💸 Pagos Pendientes ({len(deudores)})",
                     f"📄 Docs. Faltantes / Observados ({len(docs_pend)})",
@@ -796,8 +805,7 @@ elif pagina == "🔎 Visualizador General":
     )
     st.caption("Consulta en un solo lugar los datos personales, asistencias detalladas, pagos y documentos.")
 
-    resp_lista = requests.get(f"{API_URL}/api/v1/catequizandos", timeout=15)
-    lista_j = resp_lista.json() if resp_lista.status_code == 200 else []
+    lista_j = api_get("/api/v1/catequizandos") or []
 
     if not lista_j:
         st.info("No hay catequizandos registrados aún.")
@@ -992,6 +1000,7 @@ elif pagina == "👥 Directorio de Catequizandos":
                         timeout=15
                     )
                     if resp_crear.status_code in (200, 201):
+                        st.cache_data.clear()
                         st.success(f"Registrado correctamente. Token QR: {resp_crear.json().get('qr_token', '')}")
                         st.rerun()
                     else:
@@ -1001,9 +1010,8 @@ elif pagina == "👥 Directorio de Catequizandos":
                             msg = resp_crear.text
                         st.error(f"Error ({resp_crear.status_code}): {msg}")
 
-    resp_jovenes = requests.get(f"{API_URL}/api/v1/catequizandos", timeout=15)
-    if resp_jovenes.status_code == 200:
-        lista = resp_jovenes.json()
+    lista = api_get("/api/v1/catequizandos")
+    if lista is not None:
         if lista:
             df = pd.DataFrame(lista)
 
@@ -1157,6 +1165,7 @@ elif pagina == "👥 Directorio de Catequizandos":
                                 timeout=15
                             )
                             if r_up.status_code == 200:
+                                st.cache_data.clear()
                                 st.success("Datos actualizados correctamente.")
                                 st.rerun()
                             else:
@@ -1165,6 +1174,7 @@ elif pagina == "👥 Directorio de Catequizandos":
                     if st.button("🗑️ Eliminar este Catequizando", type="secondary", key=f"btn_del_cat_{cat_obj['ID']}"):
                         r_del = requests.delete(f"{API_URL}/api/v1/catequizandos/{cat_obj['ID']}", timeout=15)
                         if r_del.status_code == 200:
+                            st.cache_data.clear()
                             st.success("Catequizando eliminado.")
                             st.rerun()
                         else:
@@ -1187,13 +1197,8 @@ elif pagina == "📋 Control de Asistencias":
     tab1, tab2, tab3 = st.tabs(["📖 Catequesis (26 Temas)", "⛪ Misas (30 Misas)", "🎉 Actividades Parroquiales"])
 
     def mostrar_tabla_asistencias(tipo_filtro, etiqueta_detalle, opciones_detalle):
-        resp = requests.get(
-            f"{API_URL}/api/v1/asistencias",
-            params={"tipo": tipo_filtro},
-            timeout=15
-        )
-        if resp.status_code == 200:
-            registros = resp.json()
+        registros = api_get("/api/v1/asistencias", {"tipo": tipo_filtro})
+        if registros is not None:
             if registros:
                 nombre_slug = tipo_filtro.lower().replace(" ", "_")
                 df = pd.DataFrame(registros)
@@ -1269,6 +1274,7 @@ elif pagina == "📋 Control de Asistencias":
                     if id_asis_sel and st.button("Eliminar Asistencia", key=f"btn_del_asis_{nombre_slug}"):
                         r_del = requests.delete(f"{API_URL}/api/v1/asistencias/{id_asis_sel}", timeout=15)
                         if r_del.status_code == 200:
+                            st.cache_data.clear()
                             st.success("Asistencia eliminada.")
                             st.rerun()
                         else:
@@ -1297,8 +1303,7 @@ elif pagina == "💰 Tesorería":
 
     tab_pagos, tab_conceptos = st.tabs(["💵 Registro de Pagos", "⚙️ Catálogo de Conceptos de Pago"])
 
-    resp_conceptos = requests.get(f"{API_URL}/api/v1/tesoreria/conceptos", timeout=15)
-    lista_conceptos = resp_conceptos.json() if resp_conceptos.status_code == 200 else []
+    lista_conceptos = api_get("/api/v1/tesoreria/conceptos") or []
 
     with tab_conceptos:
         st.subheader("Catálogo Anual de Conceptos de Pago")
@@ -1318,6 +1323,7 @@ elif pagina == "💰 Tesorería":
                         timeout=15
                     )
                     if r.status_code in [200, 201]:
+                        st.cache_data.clear()
                         st.success("Concepto agregado al catálogo.")
                         st.rerun()
                     else:
@@ -1329,8 +1335,7 @@ elif pagina == "💰 Tesorería":
             st.info("Aún no hay conceptos de pago registrados para este año.")
 
     with tab_pagos:
-        resp_jovenes = requests.get(f"{API_URL}/api/v1/catequizandos", timeout=15)
-        lista_jovenes = resp_jovenes.json() if resp_jovenes.status_code == 200 else []
+        lista_jovenes = api_get("/api/v1/catequizandos") or []
 
         with st.expander("➕ Registrar Nuevo Pago / Aporte", expanded=True):
             if lista_jovenes and lista_conceptos:
@@ -1376,6 +1381,7 @@ elif pagina == "💰 Tesorería":
                                 timeout=15
                             )
                             if resp_p.status_code in [200, 201]:
+                                st.cache_data.clear()
                                 st.success(
                                     f"Pago registrado (S/ {float(conc_obj['monto_base']):.2f} | Boleta: {codigo_boleta.strip()})."
                                 )
@@ -1386,9 +1392,8 @@ elif pagina == "💰 Tesorería":
                 st.warning("Necesitas tener al menos un catequizando y un concepto de pago en el catálogo.")
 
         st.subheader("Historial de Pagos")
-        resp_pagos = requests.get(f"{API_URL}/api/v1/tesoreria/pagos", timeout=15)
-        if resp_pagos.status_code == 200:
-            data_pagos = resp_pagos.json()
+        data_pagos = api_get("/api/v1/tesoreria/pagos")
+        if data_pagos is not None:
             lista_pagos = data_pagos.get("pagos", [])
             if lista_pagos:
                 df_pagos = pd.DataFrame(lista_pagos)
@@ -1432,6 +1437,7 @@ elif pagina == "💰 Tesorería":
                             timeout=15
                         )
                         if r_del.status_code == 200:
+                            st.cache_data.clear()
                             st.success("Pago anulado correctamente.")
                             st.rerun()
                         else:
@@ -1453,8 +1459,7 @@ elif pagina == "📁 Secretaría":
 
     tab_exp, tab_docs = st.tabs(["📋 Control de Expedientes", "⚙️ Catálogo de Documentos Requisito"])
 
-    resp_docs = requests.get(f"{API_URL}/api/v1/secretaria/documentos", timeout=15)
-    lista_docs = resp_docs.json() if resp_docs.status_code == 200 else []
+    lista_docs = api_get("/api/v1/secretaria/documentos") or []
 
     with tab_docs:
         st.subheader("Catálogo Anual de Documentos Requisito")
@@ -1474,6 +1479,7 @@ elif pagina == "📁 Secretaría":
                         timeout=15
                     )
                     if r.status_code in [200, 201]:
+                        st.cache_data.clear()
                         st.success("Documento agregado al catálogo.")
                         st.rerun()
                     else:
@@ -1490,6 +1496,7 @@ elif pagina == "📁 Secretaría":
                         timeout=15
                     )
                     if r_del.status_code == 200:
+                        st.cache_data.clear()
                         st.success("Documento eliminado del catálogo.")
                         st.rerun()
                     else:
@@ -1498,8 +1505,7 @@ elif pagina == "📁 Secretaría":
             st.info("Aún no hay documentos requisito registrados para este año.")
 
     with tab_exp:
-        resp_jovenes = requests.get(f"{API_URL}/api/v1/catequizandos", timeout=15)
-        lista_jovenes = resp_jovenes.json() if resp_jovenes.status_code == 200 else []
+        lista_jovenes = api_get("/api/v1/catequizandos") or []
 
         with st.expander("📝 Registrar / Actualizar Documento de Catequizando", expanded=True):
             if lista_jovenes and lista_docs:
@@ -1525,6 +1531,7 @@ elif pagina == "📁 Secretaría":
                             timeout=15
                         )
                         if resp_e.status_code in [200, 201]:
+                            st.cache_data.clear()
                             st.success("Expediente actualizado correctamente.")
                             st.rerun()
                         else:
@@ -1561,6 +1568,7 @@ elif pagina == "📁 Secretaría":
                                         timeout=15
                                     )
                                     if r_del.status_code == 200:
+                                        st.cache_data.clear()
                                         st.success("Registro de expediente eliminado.")
                                         st.rerun()
                                     else:
@@ -1580,8 +1588,7 @@ elif pagina == "🏫 Grupos y Salones":
         "assets/paloma.jpg",
     )
 
-    resp_j = requests.get(f"{API_URL}/api/v1/catequizandos", timeout=15)
-    lista_j = resp_j.json() if resp_j.status_code == 200 else []
+    lista_j = api_get("/api/v1/catequizandos") or []
 
     if not lista_j:
         st.info("Aún no hay catequizandos registrados.")
@@ -1688,6 +1695,7 @@ elif pagina == "🏫 Grupos y Salones":
                             timeout=30
                         )
                         if r_mas.status_code == 200:
+                            st.cache_data.clear()
                             st.success(r_mas.json().get("mensaje", "Asignación aplicada."))
                             st.rerun()
                         else:
@@ -1735,6 +1743,7 @@ elif pagina == "🏫 Grupos y Salones":
                         timeout=30
                     )
                     if r_man.status_code == 200:
+                        st.cache_data.clear()
                         st.success(r_man.json().get("mensaje", "Cambios guardados."))
                         st.rerun()
                     else:
@@ -2040,6 +2049,7 @@ elif pagina == "💾 Respaldo y Restauración":
                             timeout=60
                         )
                     if r_res.status_code == 200:
+                        st.cache_data.clear()
                         st.success("¡Restauración completada!")
                         st.json(r_res.json().get("registros_restaurados", {}))
                     else:
@@ -2129,6 +2139,7 @@ elif pagina == "💾 Respaldo y Restauración":
                                 timeout=60
                             )
                         if r_imp.status_code == 200:
+                            st.cache_data.clear()
                             res = r_imp.json()
                             st.success(
                                 f"Importación terminada: **{res['creados']}** creados, "
