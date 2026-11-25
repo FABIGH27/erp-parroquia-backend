@@ -355,8 +355,8 @@ def _dibujar_carnet(pdf: FPDF, x: float, y: float, alumno: dict):
     pdf.set_line_width(0.3)
     pdf.rect(x, y, ancho, alto)
 
-    # Franja superior azul
-    pdf.set_fill_color(30, 58, 138)
+    # Franja superior roja
+    pdf.set_fill_color(170, 24, 24)
     pdf.rect(x, y, ancho, 11, style="F")
 
     pdf.set_text_color(255, 255, 255)
@@ -1105,39 +1105,79 @@ elif pagina == "👥 Directorio de Catequizandos":
             with st.expander("🖨️ Impresión de Carnets QR en Bloque (Hoja A4 - 10 por página)"):
                 modo_bloque = st.radio(
                     "¿Qué carnets deseas generar?",
-                    ["Todos los catequizandos filtrados en la tabla superior", "Seleccionar catequizandos específicos"],
+                    [
+                        "Por Colegio, Grupo y/o Salón",
+                        "Todos los catequizandos filtrados en la tabla superior",
+                        "Seleccionar catequizandos específicos",
+                    ],
                     horizontal=True,
                     key="modo_bloque_qr"
                 )
 
                 alumnos_a_imprimir = []
-                if modo_bloque == "Todos los catequizandos filtrados en la tabla superior":
+                etiqueta_archivo = "Bloque"
+
+                if modo_bloque == "Por Colegio, Grupo y/o Salón":
+                    b1, b2, b3 = st.columns(3)
+                    col_qr = b1.selectbox("Colegio:", ["Todos"] + COLEGIOS_PARROQUIA, key="qr_bloque_col")
+                    grp_qr = b2.selectbox("Grupo:", ["Todos"] + GRUPOS_OPCIONES, key="qr_bloque_grp")
+                    sal_qr = b3.selectbox("Salón:", ["Todos"] + SALONES_OPCIONES, key="qr_bloque_sal")
+
+                    alumnos_a_imprimir = lista.copy()
+                    partes_nombre = []
+                    if col_qr != "Todos":
+                        alumnos_a_imprimir = [j for j in alumnos_a_imprimir if j.get("Colegio") == col_qr]
+                        partes_nombre.append(col_qr.replace(" ", "_"))
+                    if grp_qr != "Todos":
+                        alumnos_a_imprimir = [j for j in alumnos_a_imprimir if j.get("Grupo", "Sin asignar") == grp_qr]
+                        partes_nombre.append(grp_qr.replace(" ", "_"))
+                    if sal_qr != "Todos":
+                        alumnos_a_imprimir = [j for j in alumnos_a_imprimir if j.get("Salón", "Sin asignar") == sal_qr]
+                        partes_nombre.append(sal_qr.replace(" ", "_"))
+
+                    if partes_nombre:
+                        etiqueta_archivo = "_".join(partes_nombre)
+
+                elif modo_bloque == "Todos los catequizandos filtrados en la tabla superior":
                     dnis_filtrados = st.session_state.get("dnis_directorio_filtrados", set(df["DNI"].tolist()))
                     alumnos_a_imprimir = [j for j in lista if j["DNI"] in dnis_filtrados]
+                    etiqueta_archivo = "Filtrados"
+
                 else:
-                    opciones_multi = {f"{j['Nombres']} {j['Apellidos']} (DNI: {j['DNI']})": j for j in lista}
+                    opciones_multi = {
+                        f"{j['Apellidos']}, {j['Nombres']} (DNI: {j['DNI']} - {j.get('Colegio', 'Sin asignar')})": j
+                        for j in lista
+                    }
                     seleccionados = st.multiselect(
                         "Elige los catequizandos (puedes escribir para buscar):",
                         list(opciones_multi.keys()),
                         key="multi_qr_bloque"
                     )
                     alumnos_a_imprimir = [opciones_multi[s] for s in seleccionados]
+                    etiqueta_archivo = "Seleccion"
+
+                # Ordenar alfabéticamente por Apellidos y Nombres
+                alumnos_a_imprimir.sort(
+                    key=lambda x: (x.get("Apellidos", "").upper(), x.get("Nombres", "").upper())
+                )
 
                 if alumnos_a_imprimir:
                     st.caption(
-                        f"Se generarán **{len(alumnos_a_imprimir)}** carnets ({(len(alumnos_a_imprimir) + 9) // 10} hoja(s) A4).")
-                    if st.button("⚙️ Preparar PDF en Bloque", key="btn_prep_bloque"):
+                        f"Se generarán **{len(alumnos_a_imprimir)}** carnets ordenados alfabéticamente "
+                        f"({(len(alumnos_a_imprimir) + 9) // 10} hoja(s) A4)."
+                    )
+                    if st.button("⚙️ Preparar PDF en Bloque", key="btn_prep_bloque", type="primary"):
                         with st.spinner("Generando carnets..."):
                             pdf_bloque = generar_carnets_bloque_pdf(alumnos_a_imprimir)
                         st.download_button(
                             label="📄 Descargar PDF de Carnets A4",
                             data=pdf_bloque,
-                            file_name=f"Carnets_QR_Bloque_{datetime.now().strftime('%Y%m%d')}.pdf",
+                            file_name=f"Carnets_QR_{etiqueta_archivo}_{ahora_peru().strftime('%Y%m%d')}.pdf",
                             mime="application/pdf",
                             key="btn_dl_bloque"
                         )
                 else:
-                    st.info("Selecciona al menos un catequizando para generar el PDF.")
+                    st.info("No hay catequizandos que coincidan con los filtros seleccionados.")
 
             st.divider()
             with st.expander("✏️ Editar o Eliminar Catequizando"):
