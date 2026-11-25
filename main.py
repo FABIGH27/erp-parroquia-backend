@@ -190,13 +190,18 @@ def registrar_asistencia(request: schemas.AsistenciaQRRequest, db: Session = Dep
             detail="Código QR o DNI no encontrado en el directorio."
         )
 
-    # 2.5. Validar colegio permitido si el turno usa un Código de Servicio restringido
-    if codigo_srv and codigo_srv.colegio_permitido and codigo_srv.colegio_permitido != "Todos":
+    # 2.5. Validar colegio permitido (para Código de Servicio o filtro del Administrador)
+    colegio_filtro = (
+        codigo_srv.colegio_permitido
+        if codigo_srv
+        else (request.colegio_permitido or "Todos")
+    )
+    if colegio_filtro and colegio_filtro != "Todos":
         colegio_alumno = (alumno.colegio or "Sin asignar").strip()
-        if colegio_alumno.lower() != codigo_srv.colegio_permitido.strip().lower():
+        if colegio_alumno.lower() != colegio_filtro.strip().lower():
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Este código solo permite escanear alumnos de {codigo_srv.colegio_permitido}. {alumno.nombres} pertenece a: {colegio_alumno}."
+                detail=f"Filtro activo solo para {colegio_filtro}. {alumno.nombres} {alumno.apellidos} pertenece a: {colegio_alumno}."
             )
 
     # 3. Verificar si es Administrador

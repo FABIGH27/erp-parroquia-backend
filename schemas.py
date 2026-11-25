@@ -12,6 +12,7 @@ class AsistenciaQRRequest(BaseModel):
     codigo_servicio: Optional[str] = None       # Código de turno de 4h
     fecha_hora_cliente: Optional[str] = None    # Para sincronizar cola offline
     forzar_duplicado: bool = False  # Nuevo: confirmación explícita del Admin
+    colegio_permitido: Optional[str] = "Todos"
 
 class ConceptoPagoCreate(BaseModel):
     nombre_conc: str = Field(..., max_length=100, example="Matrícula Catequesis 2026")
