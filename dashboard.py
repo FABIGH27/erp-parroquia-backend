@@ -196,14 +196,16 @@ aplicar_estilo_franciscano()
 API_URL = "https://erp-parroquia-api.onrender.com"
 
 @st.cache_data(ttl=45, show_spinner=False)
+def _api_get_cached(ruta: str, params=None):
+    r = requests.get(f"{API_URL}{ruta}", params=params, timeout=30)
+    r.raise_for_status()
+    return r.json()
+
 def api_get(ruta: str, params=None):
     try:
-        r = requests.get(f"{API_URL}{ruta}", params=params, timeout=30)
-        if r.status_code == 200:
-            return r.json()
+        return _api_get_cached(ruta, params)
     except Exception:
-        pass
-    return None
+        return None
 
 COLEGIOS_PARROQUIA = [
     "Mercedes",
