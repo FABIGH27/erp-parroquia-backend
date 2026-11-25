@@ -1519,7 +1519,7 @@ def obtener_ficha_completa(id_cateq: int, db: Session = Depends(get_db)):
             "Boleta": p.codigo_boleta or "-",
             "Monto (S/)": float(p.monto),
             "Método": p.metodo_pago,
-            "fecha_hora": _a_hora_peru(a.fecha_hora),
+            "Fecha y Hora": _a_hora_peru(p.fecha_hora),
             "Registrado por": p.registrado_por or "Sistema"
         }
         for p in pagos_db

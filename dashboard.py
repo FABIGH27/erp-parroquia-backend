@@ -3,12 +3,17 @@ import requests
 import pandas as pd
 import qrcode
 from io import BytesIO
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from fpdf import FPDF
 import json
 import os
 import base64
 import altair as alt
+
+PERU_TZ = timezone(timedelta(hours=-5))
+
+def ahora_peru() -> datetime:
+    return datetime.now(PERU_TZ)
 
 st.set_page_config(page_title="ERP Parroquia - Confirmación", layout="wide")
 
@@ -529,7 +534,7 @@ if st.sidebar.button("🚪 Cerrar sesión", use_container_width=True):
 # SECCIÓN 1: RESUMEN GENERAL (KPIs)
 # =========================================================
 if pagina == "📊 Resumen General":
-    fecha_hoy = datetime.now().strftime("%d/%m/%Y")
+    fecha_hoy = ahora_peru().strftime("%d/%m/%Y")
     st.markdown(
         f"""
             <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; margin-bottom:12px;">
@@ -570,7 +575,7 @@ if pagina == "📊 Resumen General":
             if modo_asis == "Por fecha":
                 fecha_asis_sel = f_asis2.date_input(
                     "Selecciona la fecha:",
-                    value=datetime.now().date(),
+                    value=ahora_peru().date(),
                     key="kpi_fecha_asis"
                 )
 
@@ -578,7 +583,7 @@ if pagina == "📊 Resumen General":
             etiqueta_asis = "Asistencias Registradas (General)"
 
             if modo_asis in ("Hoy", "Por fecha"):
-                fecha_obj = datetime.now().date() if modo_asis == "Hoy" else fecha_asis_sel
+                fecha_obj = ahora_peru().date() if modo_asis == "Hoy" else fecha_asis_sel
                 fecha_iso = fecha_obj.strftime("%Y-%m-%d")
                 r_all_asis = requests.get(f"{API_URL}/api/v1/asistencias", timeout=15)
                 if r_all_asis.status_code == 200:
@@ -931,7 +936,7 @@ elif pagina == "🔎 Visualizador General":
                     else:
                         st.info("No hay documentos requisito configurados.")
             else:
-                st.error("No se pudo cargar la ficha del catequizando.")
+                st.error(f"No se pudo cargar la ficha ({r_ficha.status_code}): {r_ficha.text}")
 
 # =========================================================
 # SECCIÓN 2: DIRECTORIO DE CATEQUIZANDOS
@@ -1214,6 +1219,21 @@ elif pagina == "📋 Control de Asistencias":
                     key=f"filt_col_{nombre_slug}"
                 )
 
+                # Fila 2 de filtros: Fecha (General / Hoy / Por fecha)
+                fd1, fd2, _ = st.columns([1.2, 1.2, 2])
+                modo_fecha_tab = fd1.selectbox(
+                    "Filtrar por Fecha:",
+                    ["General", "Hoy", "Por fecha"],
+                    key=f"modo_fecha_{nombre_slug}"
+                )
+                fecha_tab_sel = None
+                if modo_fecha_tab == "Por fecha":
+                    fecha_tab_sel = fd2.date_input(
+                        "Selecciona la fecha:",
+                        value=ahora_peru().date(),
+                        key=f"fecha_sel_{nombre_slug}"
+                    )
+
                 df_filtrado = df.copy()
                 if busq_asis.strip():
                     q = busq_asis.strip().lower()
@@ -1224,6 +1244,12 @@ elif pagina == "📋 Control de Asistencias":
                     df_filtrado = df_filtrado[df_filtrado[etiqueta_detalle] == filtro_det]
                 if filtro_col != "Todos" and "Colegio" in df_filtrado.columns:
                     df_filtrado = df_filtrado[df_filtrado["Colegio"] == filtro_col]
+                if modo_fecha_tab in ("Hoy", "Por fecha") and "Fecha y Hora" in df_filtrado.columns:
+                    f_obj = ahora_peru().date() if modo_fecha_tab == "Hoy" else fecha_tab_sel
+                    f_iso = f_obj.strftime("%Y-%m-%d")
+                    df_filtrado = df_filtrado[
+                        df_filtrado["Fecha y Hora"].astype(str).str.startswith(f_iso)
+                    ]
 
                 st.caption(f"Mostrando **{len(df_filtrado)}** de **{len(df)}** asistencias.")
                 st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
