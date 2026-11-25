@@ -1981,7 +1981,7 @@ elif pagina == "💾 Respaldo y Restauración":
 
             if r_bk.status_code == 200:
                 backup_data = r_bk.json()
-                fecha_tag = datetime.now().strftime("%Y%m%d_%H%M")
+                fecha_tag = ahora_peru().strftime("%Y%m%d_%H%M")
 
                 # 1. JSON técnico para restauración
                 json_bytes = json.dumps(backup_data, indent=2, ensure_ascii=False).encode("utf-8")
@@ -2026,7 +2026,7 @@ elif pagina == "💾 Respaldo y Restauración":
             try:
                 contenido = json.loads(archivo_json.read().decode("utf-8"))
                 st.info(
-                    f"**Fecha del respaldo:** {contenido.get('fecha_backup', 'Desconocida')} | "
+                    f"**Fecha del respaldo (Perú):** {contenido.get('fecha_backup_peru') or contenido.get('fecha_backup', 'Desconocida')} | "
                     f"**Catequizandos:** {len(contenido.get('catequizandos', []))} | "
                     f"**Asistencias:** {len(contenido.get('asistencias', []))} | "
                     f"**Pagos:** {len(contenido.get('pagos', []))}"

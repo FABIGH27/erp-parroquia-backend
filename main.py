@@ -1055,8 +1055,10 @@ def obtener_alertas_dashboard(db: Session = Depends(get_db)):
 # =========================================================
 @app.get("/api/v1/admin/backup/exportar", tags=["Seguridad y Accesos"])
 def exportar_backup_completo(db: Session = Depends(get_db)):
+    ahora_utc = datetime.utcnow()
     return {
-        "fecha_backup": datetime.utcnow().isoformat(),
+        "fecha_backup": ahora_utc.isoformat(),
+        "fecha_backup_peru": _a_hora_peru(ahora_utc),
         "roles": [
             {"id_rol": r.id_rol, "nombre_rol": r.nombre_rol, "nivel_acceso": r.nivel_acceso}
             for r in db.query(models.Rol).all()
@@ -1078,7 +1080,16 @@ def exportar_backup_completo(db: Session = Depends(get_db)):
                 "dni": c.dni,
                 "nombres": c.nombres,
                 "apellidos": c.apellidos,
-                "qr_token": c.qr_token
+                "qr_token": c.qr_token,
+                "colegio": c.colegio,
+                "grupo": c.grupo,
+                "salon": c.salon,
+                "estado_bautismo": c.estado_bautismo,
+                "celular_joven": c.celular_joven,
+                "celular_apoderado_1": c.celular_apoderado_1,
+                "parentesco_apoderado_1": c.parentesco_apoderado_1,
+                "celular_apoderado_2": c.celular_apoderado_2,
+                "parentesco_apoderado_2": c.parentesco_apoderado_2,
             }
             for c in db.query(models.Catequizando).all()
         ],
@@ -1106,7 +1117,8 @@ def exportar_backup_completo(db: Session = Depends(get_db)):
                 "fecha_hora": a.fecha_hora.isoformat() if a.fecha_hora else None,
                 "estado": a.estado,
                 "tipo_asistencia": a.tipo_asistencia,
-                "detalle_evento": a.detalle_evento
+                "detalle_evento": a.detalle_evento,
+                "metodo_registro": a.metodo_registro or "QR",
             }
             for a in db.query(models.Asistencia).all()
         ],
@@ -1145,7 +1157,8 @@ def restaurar_backup_completo(datos: Dict[str, Any], db: Session = Depends(get_d
         if not valor:
             return None
         try:
-            return datetime.fromisoformat(str(valor).replace("Z", "+00:00"))
+            dt = datetime.fromisoformat(str(valor).replace("Z", "+00:00"))
+            return dt.astimezone(timezone.utc).replace(tzinfo=None) if dt.tzinfo else dt
         except Exception:
             return None
 
@@ -1154,7 +1167,11 @@ def restaurar_backup_completo(datos: Dict[str, Any], db: Session = Depends(get_d
         c_roles = 0
         for r in datos.get("roles", []):
             if not db.query(models.Rol).filter(models.Rol.id_rol == r["id_rol"]).first():
-                db.add(models.Rol(**r))
+                db.add(models.Rol(
+                    id_rol=r["id_rol"],
+                    nombre_rol=r["nombre_rol"],
+                    nivel_acceso=r.get("nivel_acceso", 2),
+                ))
                 c_roles += 1
         db.flush()
         resumen["roles"] = c_roles
@@ -1166,19 +1183,41 @@ def restaurar_backup_completo(datos: Dict[str, Any], db: Session = Depends(get_d
                 (models.Usuario.id_usuario == u["id_usuario"]) | (models.Usuario.dni == u["dni"])
             ).first()
             if not existe:
-                db.add(models.Usuario(**u))
+                db.add(models.Usuario(
+                    id_usuario=u["id_usuario"],
+                    id_rol=u["id_rol"],
+                    dni=u["dni"],
+                    nombres=u["nombres"],
+                    password_hash=u["password_hash"],
+                    estado=u.get("estado", True),
+                ))
                 c_usr += 1
         db.flush()
         resumen["usuarios"] = c_usr
 
-        # 3. Catequizandos
+        # 3. Catequizandos (con todos los campos nuevos)
         c_cat = 0
         for c in datos.get("catequizandos", []):
             existe = db.query(models.Catequizando).filter(
                 (models.Catequizando.id_cateq == c["id_cateq"]) | (models.Catequizando.dni == c["dni"])
             ).first()
             if not existe:
-                db.add(models.Catequizando(**c))
+                db.add(models.Catequizando(
+                    id_cateq=c["id_cateq"],
+                    dni=c["dni"],
+                    nombres=c["nombres"],
+                    apellidos=c["apellidos"],
+                    qr_token=c.get("qr_token") or f"CAT-{c['dni']}",
+                    colegio=c.get("colegio"),
+                    grupo=c.get("grupo"),
+                    salon=c.get("salon"),
+                    estado_bautismo=c.get("estado_bautismo") or "Bautizado",
+                    celular_joven=c.get("celular_joven"),
+                    celular_apoderado_1=c.get("celular_apoderado_1"),
+                    parentesco_apoderado_1=c.get("parentesco_apoderado_1"),
+                    celular_apoderado_2=c.get("celular_apoderado_2"),
+                    parentesco_apoderado_2=c.get("parentesco_apoderado_2"),
+                ))
                 c_cat += 1
         db.flush()
         resumen["catequizandos"] = c_cat
@@ -1191,7 +1230,11 @@ def restaurar_backup_completo(datos: Dict[str, Any], db: Session = Depends(get_d
                 (models.ConceptoPago.nombre_conc == cp["nombre_conc"])
             ).first()
             if not existe:
-                db.add(models.ConceptoPago(**cp))
+                db.add(models.ConceptoPago(
+                    id_concepto=cp["id_concepto"],
+                    nombre_conc=cp["nombre_conc"],
+                    monto_base=cp["monto_base"],
+                ))
                 c_conc += 1
         db.flush()
         resumen["conceptos_pago"] = c_conc
@@ -1204,29 +1247,47 @@ def restaurar_backup_completo(datos: Dict[str, Any], db: Session = Depends(get_d
                 (models.DocumentoRequisito.nombre_doc == d["nombre_doc"])
             ).first()
             if not existe:
-                db.add(models.DocumentoRequisito(**d))
+                db.add(models.DocumentoRequisito(
+                    id_doc=d["id_doc"],
+                    nombre_doc=d["nombre_doc"],
+                    es_obligatorio=d.get("es_obligatorio", True),
+                ))
                 c_doc += 1
         db.flush()
         resumen["documentos_requisito"] = c_doc
 
-        # 6. Asistencias
+        # 6. Asistencias (incluye metodo_registro)
         c_asis = 0
         for a in datos.get("asistencias", []):
             if not db.query(models.Asistencia).filter(models.Asistencia.id_asis == a["id_asis"]).first():
-                a_copia = dict(a)
-                a_copia["fecha_hora"] = _parse_fecha(a.get("fecha_hora"))
-                db.add(models.Asistencia(**a_copia))
+                db.add(models.Asistencia(
+                    id_asis=a["id_asis"],
+                    id_cateq=a["id_cateq"],
+                    id_usuario=a.get("id_usuario"),
+                    fecha_hora=_parse_fecha(a.get("fecha_hora")),
+                    estado=a.get("estado") or "Presente",
+                    tipo_asistencia=a["tipo_asistencia"],
+                    detalle_evento=a.get("detalle_evento"),
+                    metodo_registro=a.get("metodo_registro") or "QR",
+                ))
                 c_asis += 1
         db.flush()
         resumen["asistencias"] = c_asis
 
-        # 7. Pagos
+        # 7. Pagos (incluye codigo_boleta)
         c_pag = 0
         for p in datos.get("pagos", []):
             if not db.query(models.Pago).filter(models.Pago.id_pago == p["id_pago"]).first():
-                p_copia = dict(p)
-                p_copia["fecha_hora"] = _parse_fecha(p.get("fecha_hora"))
-                db.add(models.Pago(**p_copia))
+                db.add(models.Pago(
+                    id_pago=p["id_pago"],
+                    id_cateq=p["id_cateq"],
+                    id_usuario=p.get("id_usuario"),
+                    id_concepto=p["id_concepto"],
+                    monto=p["monto"],
+                    codigo_boleta=p.get("codigo_boleta"),
+                    metodo_pago=p["metodo_pago"],
+                    fecha_hora=_parse_fecha(p.get("fecha_hora")),
+                ))
                 c_pag += 1
         db.flush()
         resumen["pagos"] = c_pag
@@ -1235,9 +1296,14 @@ def restaurar_backup_completo(datos: Dict[str, Any], db: Session = Depends(get_d
         c_exp = 0
         for e in datos.get("expedientes", []):
             if not db.query(models.Expediente).filter(models.Expediente.id_exp == e["id_exp"]).first():
-                e_copia = dict(e)
-                e_copia["fecha_rec"] = _parse_fecha(e.get("fecha_rec"))
-                db.add(models.Expediente(**e_copia))
+                db.add(models.Expediente(
+                    id_exp=e["id_exp"],
+                    id_cateq=e["id_cateq"],
+                    id_doc=e["id_doc"],
+                    id_usuario=e.get("id_usuario"),
+                    estado=e["estado"],
+                    fecha_rec=_parse_fecha(e.get("fecha_rec")),
+                ))
                 c_exp += 1
         db.commit()
         resumen["expedientes"] = c_exp

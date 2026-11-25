@@ -1,4 +1,4 @@
-# ⛪ ERP Parroquial - Confirmación
+# ⛪ ERP Parroquial - Confirmación ("Paz y Bien")
 
 Sistema integral de gestión logística, académica, financiera, documental y de control de asistencia mediante códigos QR para programas de catequesis de Confirmación.
 
@@ -32,10 +32,17 @@ graph TD
 
 | Capa | Tecnologías | Despliegue | Responsabilidad |
 | :--- | :--- | :--- | :--- |
-| **Backend (API)** | Python 3.11+, FastAPI, SQLAlchemy, Pydantic, `python-jose` (JWT), `passlib` (bcrypt) | Render (`erp-parroquia-api.onrender.com`) | Reglas de negocio, autenticación, RBAC, validaciones en tiempo real y migración automática de esquema. |
+| **Backend (API)** | Python 3.11+, FastAPI, SQLAlchemy, Pydantic, `python-jose` (JWT), `passlib` (bcrypt) | Render (`erp-parroquia-api.onrender.com`) | Reglas de negocio, autenticación, RBAC, validaciones en tiempo real, conversión a Hora Perú (`UTC-5`) y migración automática de esquema. |
 | **Base de Datos** | TiDB Cloud (compatible con MySQL) | TiDB Cloud | Almacenamiento relacional persistente con integridad referencial. |
-| **Panel Web** | Python, Streamlit, Pandas, FPDF, OpenPyXL, QRCode | Streamlit Cloud | Administración integral, reportes Excel/PDF, carnets QR A4, tesorería, secretaría y backups. |
-| **App Móvil** | Flutter (Dart) | Android (APK Release) | Escáner QR continuo, búsqueda manual, soporte offline y alertas en vivo. |
+| **Panel Web** | Python, Streamlit, Pandas, Altair, FPDF, OpenPyXL, QRCode | Streamlit Cloud | Administración integral, gráficos interactivos, reportes Excel/PDF, carnets QR A4, tesorería, secretaría y backups. |
+| **App Móvil** | Flutter (Dart: `mobile_scanner`, `wakelock_plus`, `http`) | Android (APK Release) | Escáner QR continuo, búsqueda manual, selectores de evento/colegio, soporte offline y alertas en vivo. |
+
+### Identidad Visual ("Paz y Bien")
+Tanto el Panel Web como la APK comparten una estética franciscana unificada:
+- **Café Espresso (`#2B1E17`):** Menú lateral, barras superiores y controles principales.
+- **Crema Cálido (`#F5EFE6`):** Fondo general y contenedores de lectura.
+- **Caramelo / Tierra (`#9C6644`):** Botones primarios, bordes de énfasis, alertas y gráficos interactivos.
+- **Tipografía Web:** *Times New Roman / Georgia* con tarjetas blancas redondeadas e iconografía parroquial (`assets/`).
 
 ---
 
@@ -105,6 +112,7 @@ erDiagram
         int id_usuario FK
         int id_concepto FK
         decimal monto
+        string codigo_boleta
         string metodo_pago
         datetime fecha_hora
     }
@@ -143,17 +151,18 @@ erDiagram
 
 ## 3. Reglas de Negocio y Catálogos
 
-* **Colegios:** `Mercedes`, `Politécnico`, `Santa Mónica`, `César Vallejo`, `San Francisco de Borja` y `Particulares` (colegios privados y externos a la zona).
-* **Bautismo:** `Bautizado` | `Por bautizar`.
-* **Grupos y Salones:**
-  * *Grupos:* `Sin asignar`, `Grupo Único`, `Grupo A`, `Grupo B`, `Grupo C`, `Grupo D`.
-  * *Salones:* `Sin asignar`, `Salón 1`, `Salón 2`, `Salón 3`, `Salón 4`.
-* **Calendario Anual de Asistencias:**
-  * *Catequesis:* 26 sesiones (`Tema 1` a `Tema 26`).
-  * *Misas:* 30 sesiones (`Misa 1` a `Misa 30`).
-  * *Actividades Parroquiales (9):* `Bienvenida`, `Corpus Christi`, `Pollada`, `Marcha por la Paz`, `San Francisco de Asis`, `Retiro Espiritual`, `Confesión`, `Ensayo de Ceremonia`, `Ceremonia`.
-* **Zona Horaria:** Las validaciones de tardanza y vencimientos de códigos de servicio operan en **Hora Perú (UTC-5)**.
-* **Formato de Token QR:** `CAT-{DNI}` (actualizado automáticamente si se corrige el DNI del catequizando).
+- **Colegios:** `Mercedes`, `Politécnico`, `Santa Mónica`, `César Vallejo`, `San Francisco de Borja` y `Particulares` (colegios privados y externos a la zona).
+- **Bautismo:** `Bautizado` | `Por bautizar`.
+- **Grupos y Salones:**
+  - *Grupos:* `Sin asignar`, `Grupo Único`, `Grupo A`, `Grupo B`, `Grupo C`, `Grupo D`.
+  - *Salones:* `Sin asignar`, `Salón 1`, `Salón 2`, `Salón 3`, `Salón 4`.
+- **Calendario Anual de Asistencias:**
+  - *Catequesis:* 26 sesiones (`Tema 1` a `Tema 26`).
+  - *Misas:* 30 sesiones (`Misa 1` a `Misa 30`).
+  - *Actividades Parroquiales (9):* `Bienvenida`, `Corpus Christi`, `Pollada`, `Marcha por la Paz`, `San Francisco de Asis`, `Retiro Espiritual`, `Confesión`, `Ensayo de Ceremonia`, `Ceremonia`.
+- **Tesorería (Monto Fijo y Boleta):** Al registrar un pago, el backend asigna automáticamente el `monto_base` del concepto seleccionado y registra el **Código de Boleta Física** (`codigo_boleta`) entregado por el catequizando.
+- **Zona Horaria (Hora Perú `UTC-5`):** La base de datos almacena marcas de tiempo en UTC; tanto la API (`_a_hora_peru`) como el Dashboard (`ahora_peru`) convierten automáticamente las fechas, horas límite de tardanza, vencimientos de códigos y filtros de fecha (*Hoy* / *Por fecha*) a **Hora Perú (UTC-5)**.
+- **Formato de Token QR:** `CAT-{DNI}` (actualizado automáticamente si se corrige el DNI del catequizando).
 
 ---
 
@@ -162,7 +171,7 @@ erDiagram
 ```mermaid
 sequenceDiagram
     actor Admin as Administrador (Web)
-    actor Cat as Catequista (APK)
+    actor Cat as Catequista / Admin (APK)
     participant API as FastAPI (Render)
     participant DB as TiDB Cloud
 
@@ -170,13 +179,13 @@ sequenceDiagram
     API->>DB: Guarda código SRV-XXXXXX
     API-->>Admin: Retorna código activo
 
-    Cat->>API: POST /api/v1/movil/login (DNI, Pass, SRV-XXXXXX)
+    Cat->>API: POST /api/v1/movil/login (DNI, Pass, SRV-XXXXXX o vacío si es Admin)
     API->>DB: Valida usuario, vigencia y colegio permitido
-    API-->>Cat: Inicia turno bloqueado a Tema 3 + Mercedes
+    API-->>Cat: Inicia turno bloqueado (o modo ADMIN-LIBRE con selectores)
 
-    Cat->>API: POST /api/v1/asistencia (QR/DNI + SRV-XXXXXX)
-    API->>DB: 1. Verifica código activo/no revocado<br/>2. Verifica colegio == Mercedes (403 si no)<br/>3. Anti-duplicado mismo día/evento (409)<br/>4. Evalúa Presente vs Tardanza (UTC-5)<br/>5. Consulta pendientes (Bautismo, Docs, Pagos)
-    API-->>Cat: 200 OK + Estado + Lista completa de pendientes
+    Cat->>API: POST /api/v1/asistencia (QR/DNI + SRV-XXXXXX + colegio_permitido)
+    API->>DB: 1. Verifica código activo/no revocado (401 si no)<br/>2. Verifica colegio permitido — Código o Filtro Admin (403 si no)<br/>3. Anti-duplicado mismo día/evento (409)<br/>4. Evalúa Presente vs Tardanza (UTC-5)<br/>5. Consulta pendientes (Bautismo, Docs, Pagos)
+    API-->>Cat: 200 OK + Colegio + Evento + Estado + Lista completa de pendientes
 ```
 
 ---
@@ -188,10 +197,10 @@ sequenceDiagram
 | Rol | Resumen | Visualizador | Directorio | Asistencias | Tesorería | Secretaría | Grupos/Salones | Accesos Temp. | Usuarios | Backups |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | **Administrador / Coordinador** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **Vocal** | ✅ | 🔑* | ✅ | ✅ | 🔑* | 🔑* | ❌ | ❌ | ❌ | ❌ |
-| **Secretario / Secretaria** | ✅ | 🔑* | ✅ | 🔑* | 🔑* | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Vocal** | ✅ | ✅ | ✅ | ✅ | 🔑* | 🔑* | ❌ | ❌ | ❌ | ❌ |
+| **Secretario / Secretaria** | ✅ | ✅ | ✅ | 🔑* | 🔑* | ✅ | ❌ | ❌ | ❌ | ❌ |
 | **Tesorero / Tesorera** | ✅ | 🔑* | 🔑* | 🔑* | ✅ | 🔑* | ❌ | ❌ | ❌ | ❌ |
-| **Catequista** | 🔑* | 🔑* | ✅ | ✅ | 🔑* | 🔑* | ❌ | ❌ | ❌ | ❌ |
+| **Catequista** | 🔑* | ✅ | ✅ | ✅ | 🔑* | 🔑* | ❌ | ❌ | ❌ | ❌ |
 
 > *`🔑*`: Desbloqueable temporalmente en la sesión mediante una **Clave Temporal Web (`TMP-XXXXXX`)** generada por un Administrador (`24h`, `48h`, `7d` o `Indeterminado`, revocable en vivo).*
 
@@ -199,13 +208,22 @@ sequenceDiagram
 
 ## 6. Módulos del Panel Web (`dashboard.py`)
 
-1. **📊 Resumen General:** KPIs principales, gráficos de recaudación y expedientes, y **Panel de Alertas** en 3 pestañas (*Pagos Pendientes*, *Documentos Faltantes/Observados* y *Baja Asistencia* configurable) con filtro, columna de colegio y exportación a Excel/PDF.
-2. **🔎 Visualizador General:** Buscador unificado con botón **Buscar Ficha** que muestra en una sola vista todos los datos personales, grupo/salón, contactos, KPIs individuales y 5 pestañas de control detallado (*Tema 1–26*, *Misa 1–30*, *Actividades*, *Pagos* y *Documentos*), todo exportable.
+1. **📊 Resumen General:**
+   - Encabezado con saludo institucional, fecha actual en **Hora Perú (UTC-5)** y portada.
+   - KPIs principales con **filtro de Asistencias Registradas** (*General*, *Hoy* y *Por fecha*).
+   - **Gráficos Circulares (Dona) Interactivos (Altair)** en paleta franciscana:
+     - *Estado de Pagos por Concepto:* Desplegable por concepto que muestra cuántos pagaron vs. pendientes.
+     - *Expedientes por Documento:* Desplegable por documento requisito que muestra entregados, observados y pendientes.
+   - **Panel de Alertas y Seguimiento** en 3 pestañas (*Pagos Pendientes*, *Documentos Faltantes/Observados* y *Baja Asistencia* configurable), todas con filtros combinables por **Colegio**, **Grupo**, concepto/documento y buscador, con exportación a Excel/PDF.
+2. **🔎 Visualizador General:** Buscador unificado con botón **Buscar Ficha** que muestra datos personales, grupo/salón, contactos, KPIs individuales y 5 pestañas detalladas (*Tema 1–26*, *Misa 1–30*, *Actividades*, *Pagos* con código de boleta y *Documentos*), con fechas en hora Perú y exportación.
 3. **👥 Directorio de Catequizandos:** Registro y edición completa (DNI, colegio, bautismo, celular del joven y hasta 2 apoderados con parentesco), filtros combinables por colegio y bautismo, generador de **Carnet QR Individual (`85 x 54 mm`)** y **Carnets en Bloque A4 (10 por hoja)** listos para imprimir y recortar.
-4. **📋 Control de Asistencias:** Pestañas de Catequesis (26 temas), Misas (30 misas) y Actividades, con columna de colegio, filtros por detalle y colegio, exportación y eliminación de registros erróneos.
-5. **💰 Tesorería:** Catálogo anual de conceptos de pago, registro de aportes (`Efectivo`, `Yape`, `Transferencia`), historial con total recaudado, exportación y anulación de pagos.
+4. **📋 Control de Asistencias:** Pestañas de Catequesis (26 temas), Misas (30 misas) y Actividades, con columna de colegio, filtros combinables por **Tema/Misa/Actividad**, **Colegio**, **Fecha (*General* / *Hoy* / *Por fecha* en hora Perú)** y buscador, además de exportación y eliminación de registros erróneos.
+5. **💰 Tesorería:**
+   - Catálogo anual de conceptos de pago con monto base fijo.
+   - **Registro de Pagos:** Buscador en vivo de catequizando por **DNI o nombre**, asignación automática del **monto fijo** del concepto y campo obligatorio de **Código de Boleta Física** (`Efectivo`, `Yape`, `Transferencia`).
+   - **Historial de Pagos:** Filtros combinables por **Concepto**, **Colegio**, **Grupo** y buscador (DNI, alumno o boleta), total recaudado filtrado, exportación y anulación de pagos.
 6. **📁 Secretaría:** Catálogo de documentos requisito (obligatorios/opcionales), actualización de expedientes (`Entregado`, `Pendiente`, `Observado`) y consulta/exportación individual.
-7. **🏫 Grupos y Salones *(Admin)*:** Asignación masiva por **rangos de letras (A–Z)** según la inicial del apellido (soporta 1 a 4 bloques, selección personalizada de `Grupo A–D`, `Grupo Único` o `Salón 1–4` y conteo en vivo) + **tabla editable tipo Excel** (`st.data_editor`) para ajustes puntuales.
+7. **🏫 Grupos y Salones *(Admin)*:** Asignación masiva por **rangos de letras (A–Z)** según la inicial del apellido (1 a 4 bloques, `Grupo A–D`, `Grupo Único` o `Salón 1–4` con conteo en vivo) + **tabla editable tipo Excel** (`st.data_editor`) para ajustes puntuales.
 8. **🔐 Accesos Temporales *(Admin)*:** Emisión y revocación en vivo de **Códigos de Servicio APK (máx. 4h)** y **Claves Temporales Web**.
 9. **👤 Gestión de Usuarios *(Admin)*:** Creación y eliminación de cuentas del equipo parroquial con alta automática de roles.
 10. **💾 Respaldo y Restauración *(Admin)*:** Exportación dual (`.json` técnico + `.xlsx` multi-hoja), restauración transaccional respetando llaves foráneas sin sobrescribir registros existentes, e importación masiva de catequizandos desde Excel (`.xlsx`).
@@ -214,11 +232,14 @@ sequenceDiagram
 
 ## 7. Aplicación Móvil Android (APK - Flutter)
 
-* **Login con Turno:** Catequistas/vocales ingresan con Código de Servicio (`SRV-XXXXXX`); Administradores pueden entrar en modo libre (`ADMIN-LIBRE`) con selector rápido de Tipo y Tema/Misa/Actividad en la barra superior.
-* **Escáner QR + Búsqueda Manual:** Lectura continua de `CAT-{dni}` y registro manual por DNI o nombre si el joven olvidó su carnet.
-* **Validaciones en Vivo:** Bloqueo por colegio no permitido (`HTTP 403`), control anti-duplicados (`HTTP 409` con opción de forzar solo para Administradores) y cálculo automático de `Tardanza`.
-* **Modo Offline:** Encola escaneos localmente con su hora original (`fecha_hora_cliente`) y sincroniza al recuperar internet.
-* **Historial con Pendientes:** Muestra los últimos 5 registros indicando todos los pendientes del joven: `Falta bautizarse`, documentos obligatorios faltantes y deudas exactas.
+- **Diseño Franciscano ("Paz y Bien"):** Interfaz adaptada a la paleta café espresso, crema cálido y caramelo tanto en Login como en el escáner y modales.
+- **Login con Turno y Modo Administrador:**
+  - Catequistas/vocales ingresan con Código de Servicio (`SRV-XXXXXX`) bloqueado a un evento y colegio.
+  - Administradores pueden ingresar en modo libre (`ADMIN-LIBRE`) con **selectores en pantalla** para elegir **Tipo** (*Catequesis*, *Misa*, *Actividad Parroquial*), **Detalle** (*Tema 1–26*, *Misa 1–30* o *Actividad*) y **Colegio** (*Todos* o un colegio específico).
+- **Escáner QR + Búsqueda Manual:** Lectura continua de `CAT-{dni}` con flash, pausa, zoom y registro manual por DNI o nombre si el joven olvidó su carnet.
+- **Validaciones en Vivo:** Bloqueo estricto por colegio no permitido (`HTTP 403`) tanto en Códigos de Servicio como en el filtro de colegio del Administrador, control anti-duplicados (`HTTP 409` con confirmación opcional solo para Administradores) y cálculo automático de `Tardanza` en Hora Perú.
+- **Modo Offline:** Encola escaneos localmente con su hora original (`fecha_hora_cliente`) y sincroniza automáticamente al recuperar conexión.
+- **Historial de Escaneados Enriquecido:** Muestra hasta los últimos 15 registros con el **Colegio** del catequizando, el **Tema / Misa / Actividad** registrado, estado, método, hora y todos sus pendientes (`Falta bautizarse`, documentos obligatorios faltantes y deudas exactas).
 
 ---
 
@@ -233,22 +254,22 @@ sequenceDiagram
 | | `POST` | `/api/v1/catequizandos` | Crear catequizando y generar `qr_token`. |
 | | `PUT` | `/api/v1/catequizandos/{id_cateq}` | Actualizar ficha completa. |
 | | `DELETE` | `/api/v1/catequizandos/{id_cateq}` | Eliminar catequizando (protegido si tiene pagos). |
-| | `GET` | `/api/v1/catequizandos/{id_cateq}/ficha-completa` | Ficha integral para Visualizador General. |
+| | `GET` | `/api/v1/catequizandos/{id_cateq}/ficha-completa` | Ficha integral (asistencias, pagos con boleta y docs en hora Perú). |
 | | `PUT` | `/api/v1/admin/catequizandos/asignar-masivo` | Asignación masiva de grupos y salones. |
 | | `POST` | `/api/v1/admin/importar/catequizandos` | Importación masiva desde Excel. |
 | | `GET` | `/api/v1/movil/catequizandos/buscar` | Búsqueda rápida para registro manual en APK. |
-| **Asistencias** | `POST` | `/api/v1/asistencia` | Registrar asistencia QR/Manual y devolver alertas. |
-| | `GET` | `/api/v1/asistencias` | Listar asistencias filtrables por `tipo`. |
+| **Asistencias** | `POST` | `/api/v1/asistencia` | Registrar asistencia QR/Manual, validar `colegio_permitido` y devolver colegio, evento y alertas. |
+| | `GET` | `/api/v1/asistencias` | Listar asistencias en Hora Perú (`UTC-5`), filtrables por `tipo`. |
 | | `DELETE` | `/api/v1/asistencias/{id_asis}` | Eliminar asistencia duplicada o errónea. |
 | **Tesorería** | `GET / POST` | `/api/v1/tesoreria/conceptos` | Listar y crear conceptos de pago. |
-| | `GET / POST` | `/api/v1/tesoreria/pagos` | Listar historial (con total) y registrar pagos. |
+| | `GET / POST` | `/api/v1/tesoreria/pagos` | Listar historial (con boleta, colegio, grupo y hora Perú) y registrar pagos con monto fijo automático. |
 | | `DELETE` | `/api/v1/tesoreria/pagos/{id_pago}` | Anular/eliminar un pago. |
 | **Secretaría** | `GET / POST / DELETE` | `/api/v1/secretaria/documentos` | Gestionar catálogo de documentos requisito. |
 | | `POST` | `/api/v1/secretaria/expedientes` | Registrar o actualizar estado de documento. |
 | | `GET` | `/api/v1/secretaria/expedientes/{dni}` | Consultar expediente completo de un alumno. |
 | | `DELETE` | `/api/v1/secretaria/expedientes/{id_exp}` | Eliminar registro de expediente. |
-| **Dashboard** | `GET` | `/api/v1/dashboard/resumen` | KPIs generales y datos de gráficos. |
-| | `GET` | `/api/v1/dashboard/alertas` | Deudores, docs faltantes y resumen de asistencias. |
+| **Dashboard** | `GET` | `/api/v1/dashboard/resumen` | KPIs generales del panel. |
+| | `GET` | `/api/v1/dashboard/alertas` | Deudores, docs faltantes y resumen de asistencias (incluye `Colegio` y `Grupo`). |
 | **Admin** | `GET / POST / DELETE` | `/api/v1/admin/usuarios` | Gestión de usuarios y roles. |
 | | `GET / POST / PUT` | `/api/v1/admin/claves-temporales` | Gestión y revocación de claves web. |
 | | `GET / POST / PUT` | `/api/v1/admin/codigos-servicio` | Gestión y revocación de códigos APK (máx. 4h). |
@@ -264,16 +285,18 @@ Cada `git push` a la rama principal despliega automáticamente los cambios tanto
 ```powershell
 git add .
 git commit -m "Descripción del cambio"
-git push
+git push origin main
 ```
 
 ### Compilación de la APK (Flutter)
 Desde la carpeta del proyecto móvil (`erp_movil_catequesis`):
 ```powershell
+flutter analyze
 flutter build apk --release
 ```
 El instalador generado queda en `build/app/outputs/flutter-apk/app-release.apk`.
 
 ### Recomendaciones Operativas
-* Realizar un **Backup Técnico (`.json`)** semanal desde `💾 Respaldo y Restauración` y guardarlo en almacenamiento externo.
-* Generar los **Códigos de Servicio APK** unos minutos antes de cada sesión indicando siempre el **Tema/Misa**, el **Colegio** y la **hora límite de tardanza**.
+- Realizar un **Backup Técnico (`.json`)** semanal desde `💾 Respaldo y Restauración` y guardarlo en almacenamiento externo.
+- Generar los **Códigos de Servicio APK** unos minutos antes de cada sesión indicando siempre el **Tema/Misa**, el **Colegio** y la **hora límite de tardanza**.
+- En Tesorería, verificar siempre que el **Código de Boleta Física** coincida con el talonario antes de guardar el pago.
