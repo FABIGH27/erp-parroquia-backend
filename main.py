@@ -25,6 +25,11 @@ with engine.connect() as conn:
         conn.commit()
     except Exception:
         pass
+    try:
+        conn.execute(text("ALTER TABLE pagos ADD COLUMN codigo_boleta VARCHAR(50) NULL"))
+        conn.commit()
+    except Exception:
+        pass
 
 with engine.connect() as conn:
     nuevas_cols = [
@@ -295,11 +300,14 @@ def registrar_asistencia(request: schemas.AsistenciaQRRequest, db: Session = Dep
         "mensaje": "Asistencia registrada correctamente",
         "alumno": f"{alumno.nombres} {alumno.apellidos}",
         "dni": alumno.dni,
+        "colegio": alumno.colegio or "Sin asignar",
+        "tipo_asistencia": tipo_final,
+        "detalle_evento": detalle_final or "-",
         "estado": estado_asis,
         "metodo_registro": metodo_final,
         "hora_registro": nueva_asistencia.fecha_hora,
         "es_duplicado": ya_registrado is not None,
-        "alertas_pendientes": alertas_pendientes  # Máximo 3 para no saturar la pantalla
+        "alertas_pendientes": alertas_pendientes
     }
 
 
@@ -343,13 +351,14 @@ def registrar_pago(pago: schemas.PagoCreate, db: Session = Depends(get_db)):
     if not concepto:
         raise HTTPException(status_code=404, detail="Concepto de pago no encontrado")
 
-    monto_final = pago.monto if pago.monto is not None else concepto.monto_base
+    monto_final = float(concepto.monto_base)
 
     nuevo_pago = models.Pago(
         id_cateq=alumno.id_cateq,
         id_usuario=pago.id_usuario,
         id_concepto=concepto.id_concepto,
         monto=monto_final,
+        codigo_boleta=(pago.codigo_boleta or "").strip() or None,
         metodo_pago=pago.metodo_pago
     )
     db.add(nuevo_pago)
@@ -361,6 +370,7 @@ def registrar_pago(pago: schemas.PagoCreate, db: Session = Depends(get_db)):
         "id_pago": nuevo_pago.id_pago,
         "alumno": f"{alumno.nombres} {alumno.apellidos}",
         "concepto": concepto.nombre_conc,
+        "codigo_boleta": nuevo_pago.codigo_boleta or "-",
         "monto": float(nuevo_pago.monto),
         "metodo_pago": nuevo_pago.metodo_pago,
         "fecha_hora": nuevo_pago.fecha_hora
@@ -375,7 +385,10 @@ def listar_pagos(db: Session = Depends(get_db)):
             models.Catequizando.dni,
             models.Catequizando.nombres,
             models.Catequizando.apellidos,
+            models.Catequizando.colegio,
+            models.Catequizando.grupo,
             models.ConceptoPago.nombre_conc,
+            models.Pago.codigo_boleta,
             models.Pago.monto,
             models.Pago.metodo_pago,
             models.Pago.fecha_hora,
@@ -398,7 +411,10 @@ def listar_pagos(db: Session = Depends(get_db)):
                 "id_pago": r.id_pago,
                 "dni": r.dni,
                 "alumno": f"{r.nombres} {r.apellidos}",
+                "colegio": r.colegio or "Sin asignar",
+                "grupo": r.grupo or "Sin asignar",
                 "concepto": r.nombre_conc,
+                "codigo_boleta": r.codigo_boleta or "-",
                 "monto": float(r.monto),
                 "metodo_pago": r.metodo_pago,
                 "fecha_hora": r.fecha_hora,
@@ -982,6 +998,7 @@ def obtener_alertas_dashboard(db: Session = Depends(get_db)):
                     "DNI": j.dni,
                     "Catequizando": nombre_completo,
                     "Colegio": j.colegio or "Sin asignar",
+                    "Grupo": j.grupo or "Sin asignar",
                     "Concepto": c.nombre_conc,
                     "Monto Base (S/)": base,
                     "Pagado (S/)": pagado,
@@ -996,6 +1013,7 @@ def obtener_alertas_dashboard(db: Session = Depends(get_db)):
                     "DNI": j.dni,
                     "Catequizando": nombre_completo,
                     "Colegio": j.colegio or "Sin asignar",
+                    "Grupo": j.grupo or "Sin asignar",
                     "Documento": d.nombre_doc,
                     "Estado": estado
                 })
@@ -1008,6 +1026,7 @@ def obtener_alertas_dashboard(db: Session = Depends(get_db)):
             "DNI": j.dni,
             "Catequizando": nombre_completo,
             "Colegio": j.colegio or "Sin asignar",
+            "Grupo": j.grupo or "Sin asignar",
             "Catequesis": cat,
             "Misas": misas,
             "Actividades": acts,
@@ -1087,6 +1106,7 @@ def exportar_backup_completo(db: Session = Depends(get_db)):
                 "id_usuario": p.id_usuario,
                 "id_concepto": p.id_concepto,
                 "monto": float(p.monto),
+                "codigo_boleta": p.codigo_boleta,
                 "metodo_pago": p.metodo_pago,
                 "fecha_hora": p.fecha_hora.isoformat() if p.fecha_hora else None
             }
@@ -1450,6 +1470,7 @@ def obtener_ficha_completa(id_cateq: int, db: Session = Depends(get_db)):
             models.Pago.id_pago,
             models.Pago.id_concepto,
             models.ConceptoPago.nombre_conc,
+            models.Pago.codigo_boleta,
             models.Pago.monto,
             models.Pago.metodo_pago,
             models.Pago.fecha_hora,
@@ -1484,6 +1505,7 @@ def obtener_ficha_completa(id_cateq: int, db: Session = Depends(get_db)):
         {
             "ID": p.id_pago,
             "Concepto": p.nombre_conc,
+            "Boleta": p.codigo_boleta or "-",
             "Monto (S/)": float(p.monto),
             "Método": p.metodo_pago,
             "Fecha y Hora": p.fecha_hora.strftime("%d/%m/%Y %H:%M") if p.fecha_hora else "-",

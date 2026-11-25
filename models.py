@@ -84,6 +84,7 @@ class Pago(Base):
     id_usuario = Column(Integer, ForeignKey("usuarios.id_usuario", ondelete="RESTRICT"), nullable=False)
     id_concepto = Column(Integer, ForeignKey("conceptos_pago.id_concepto", ondelete="RESTRICT"), nullable=False)
     monto = Column(Numeric(10, 2), nullable=False)
+    codigo_boleta = Column(String(50), nullable=True)
     metodo_pago = Column(Enum("Efectivo", "Yape", "Transferencia"), nullable=False)
     fecha_hora = Column(TIMESTAMP, server_default=func.now())
 

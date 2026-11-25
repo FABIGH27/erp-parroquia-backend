@@ -47,20 +47,12 @@ def mostrar_encabezado_modulo(titulo: str, subtitulo: str, ruta_icono: str):
 
 def aplicar_estilo_franciscano():
     st.markdown("""
-    
-    /* Notificaciones informativas (st.info) en paleta franciscana */
-    [data-testid="stAlert"] {
-        background-color: #EFE6DA !important;
-        border: 1px solid #D4A373 !important;
-        border-left: 5px solid #9C6644 !important;
-        border-radius: 12px !important;
-        color: #2E2018 !important;
-    }
-    [data-testid="stAlert"] * {
-        color: #2E2018 !important;
-    }
-    
     <style>
+    /* Fuente Times New Roman en todo el sistema */
+    html, body, .stApp, [class*="css"], h1, h2, h3, h4, p, label, input, button, textarea, select {
+        font-family: "Times New Roman", Times, Georgia, serif !important;
+    }
+
     /* Fondo crema cálido */
     .stApp {
         background-color: #F5EFE6;
@@ -91,6 +83,35 @@ def aplicar_estilo_franciscano():
         font-weight: 600;
     }
 
+    /* Expander de clave temporal y sus inputs dentro del Sidebar */
+    [data-testid="stSidebar"] [data-testid="stExpander"] {
+        background-color: #3E2C22 !important;
+        border: 1px solid #9C6644 !important;
+        border-radius: 12px !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stExpander"] summary,
+    [data-testid="stSidebar"] [data-testid="stExpander"] summary * {
+        color: #F5EFE6 !important;
+    }
+    [data-testid="stSidebar"] input {
+        background-color: #2B1E17 !important;
+        color: #F5EFE6 !important;
+        border: 1px solid #9C6644 !important;
+    }
+
+    /* Botones en el Sidebar (Cerrar sesión / Desbloquear) */
+    [data-testid="stSidebar"] .stButton > button {
+        background-color: #3E2C22 !important;
+        color: #F5EFE6 !important;
+        border: 1px solid #9C6644 !important;
+        border-radius: 10px !important;
+        font-weight: 600 !important;
+    }
+    [data-testid="stSidebar"] .stButton > button:hover {
+        background-color: #9C6644 !important;
+        color: #FFFFFF !important;
+    }
+
     /* Tarjetas de KPIs blancas con sombra suave */
     [data-testid="stMetric"] {
         background-color: #FFFFFF;
@@ -107,12 +128,31 @@ def aplicar_estilo_franciscano():
         color: #2E2018 !important;
     }
 
-    /* Tarjetas para formularios y expanders */
-    [data-testid="stForm"], [data-testid="stExpander"] {
+    /* Tarjetas para formularios y expanders del contenido principal */
+    [data-testid="stForm"], .main [data-testid="stExpander"] {
         background-color: #FFFFFF;
         border-radius: 16px;
         border: 1px solid #EADFD3;
         box-shadow: 0 4px 12px rgba(46, 32, 24, 0.04);
+    }
+
+    /* Notificaciones informativas (st.info) en paleta franciscana */
+    [data-testid="stAlert"] {
+        background-color: #EFE6DA !important;
+        border: 1px solid #D4A373 !important;
+        border-left: 5px solid #9C6644 !important;
+        border-radius: 12px !important;
+        color: #2E2018 !important;
+    }
+    [data-testid="stAlert"] * {
+        color: #2E2018 !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stAlert"] {
+        background-color: #3E2C22 !important;
+        border: 1px solid #9C6644 !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stAlert"] * {
+        color: #F5EFE6 !important;
     }
 
     /* Botones primarios caramelo/tierra */
@@ -143,35 +183,6 @@ def aplicar_estilo_franciscano():
         color: #9C6644 !important;
         border-top: 3px solid #9C6644 !important;
     }
-    
-    /* Fuente Times New Roman en todo el sistema */
-    html, body, .stApp, [class*="css"], h1, h2, h3, h4, p, label, input, button, textarea, select {
-        font-family: "Times New Roman", Times, Georgia, serif !important;
-    }
-
-    /* Cuadro de usuario logueado en el Sidebar */
-    [data-testid="stSidebar"] [data-testid="stAlert"] {
-        background-color: #3E2C22 !important;
-        border: 1px solid #9C6644 !important;
-        border-radius: 12px !important;
-    }
-    [data-testid="stSidebar"] [data-testid="stAlert"] * {
-        color: #F5EFE6 !important;
-    }
-
-    /* Botón de Cerrar Sesión en el Sidebar */
-    [data-testid="stSidebar"] .stButton > button {
-        background-color: #3E2C22 !important;
-        color: #F5EFE6 !important;
-        border: 1px solid #9C6644 !important;
-        border-radius: 10px !important;
-        font-weight: 600 !important;
-    }
-    [data-testid="stSidebar"] .stButton > button:hover {
-        background-color: #9C6644 !important;
-        color: #FFFFFF !important;
-    }
-    
     </style>
     """, unsafe_allow_html=True)
 
@@ -388,7 +399,7 @@ if not st.session_state["admin_logueado"]:
         b64_portada = _img_b64("assets/portada.jpg")
         if b64_portada:
             st.markdown(
-                f'<img src="data:image/jpeg;base64,{b64_portada}" '
+                f'<img src="{b64_portada}" '
                 f'style="width:100%; border-radius:18px; margin-bottom:14px; '
                 f'box-shadow:0 6px 18px rgba(46,32,24,0.14);" />',
                 unsafe_allow_html=True,
