@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from sqlalchemy import text
 import models
 from database import engine
-from routers import auth, catequizandos, asistencias, tesoreria, secretaria, dashboard
+from routers import rt_auth, rt_catequizandos, rt_asistencias, rt_tesoreria, rt_secretaria, rt_dashboard
 
 # Sincroniza y crea las tablas en MySQL si no existen
 models.Base.metadata.create_all(bind=engine)
@@ -35,9 +35,9 @@ app = FastAPI(
     version="1.0.0"
 )
 
-app.include_router(auth.router)
-app.include_router(catequizandos.router)
-app.include_router(asistencias.router)
-app.include_router(tesoreria.router)
-app.include_router(secretaria.router)
-app.include_router(dashboard.router)
+app.include_router(rt_auth.router)
+app.include_router(rt_catequizandos.router)
+app.include_router(rt_asistencias.router)
+app.include_router(rt_tesoreria.router)
+app.include_router(rt_secretaria.router)
+app.include_router(rt_dashboard.router)

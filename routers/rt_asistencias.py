@@ -8,7 +8,7 @@ import models
 import schemas
 import security
 from database import get_db
-from routers.deps import PERU_TZ, _a_hora_peru
+from routers.rt_deps import PERU_TZ, _a_hora_peru
 
 router = APIRouter()
 

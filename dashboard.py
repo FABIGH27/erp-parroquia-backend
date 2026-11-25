@@ -5,14 +5,14 @@ st.set_page_config(page_title="ERP Parroquia - Confirmación", layout="wide")
 
 from utils.api import API_URL
 from utils.estilos import _img_b64, aplicar_estilo_franciscano
-from views.resumen import mostrar_resumen
-from views.visualizador import mostrar_visualizador
-from views.directorio import mostrar_directorio
-from views.asistencias import mostrar_asistencias
-from views.tesoreria import mostrar_tesoreria
-from views.secretaria import mostrar_secretaria
-from views.grupos import mostrar_grupos
-from views.admin import (
+from views.vista_resumen import mostrar_resumen
+from views.vista_visualizador import mostrar_visualizador
+from views.vista_directorio import mostrar_directorio
+from views.vista_asistencias import mostrar_asistencias
+from views.vista_tesoreria import mostrar_tesoreria
+from views.vista_secretaria import mostrar_secretaria
+from views.vista_grupos import mostrar_grupos
+from views.vista_admin import (
     mostrar_accesos_temporales,
     mostrar_gestion_usuarios,
     mostrar_respaldo,

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 import models
 import schemas
 from database import get_db
-from routers.deps import _a_hora_peru, requerir_rol_tesoreria
+from routers.rt_deps import _a_hora_peru, requerir_rol_tesoreria
 
 router = APIRouter()
 

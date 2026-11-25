@@ -206,7 +206,7 @@ sequenceDiagram
 
 ---
 
-## 6. Módulos del Panel Web (`dashboard.py`)
+## 6. Módulos del Panel Web (`rt_dashboard.py`)
 
 1. **📊 Resumen General:**
    - Encabezado con saludo institucional, fecha actual en **Hora Perú (UTC-5)** y portada.

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 import models
 import schemas
 from database import get_db
-from routers.deps import _a_hora_peru
+from routers.rt_deps import _a_hora_peru
 
 router = APIRouter()
 
