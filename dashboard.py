@@ -560,9 +560,37 @@ if pagina == "📊 Resumen General":
             datos = resp.json()
             kpis = datos["kpis"]
 
+            f_asis1, f_asis2, _ = st.columns([1.2, 1.2, 2.6])
+            modo_asis = f_asis1.selectbox(
+                "Filtro de Asistencias Registradas:",
+                ["General", "Hoy", "Por fecha"],
+                key="kpi_modo_asis"
+            )
+            fecha_asis_sel = None
+            if modo_asis == "Por fecha":
+                fecha_asis_sel = f_asis2.date_input(
+                    "Selecciona la fecha:",
+                    value=datetime.now().date(),
+                    key="kpi_fecha_asis"
+                )
+
+            total_asis_mostrar = kpis["total_asistencias_registradas"]
+            etiqueta_asis = "Asistencias Registradas (General)"
+
+            if modo_asis in ("Hoy", "Por fecha"):
+                fecha_obj = datetime.now().date() if modo_asis == "Hoy" else fecha_asis_sel
+                fecha_iso = fecha_obj.strftime("%Y-%m-%d")
+                r_all_asis = requests.get(f"{API_URL}/api/v1/asistencias", timeout=15)
+                if r_all_asis.status_code == 200:
+                    total_asis_mostrar = sum(
+                        1 for a in r_all_asis.json()
+                        if str(a.get("Fecha y Hora", "")).startswith(fecha_iso)
+                    )
+                etiqueta_asis = f"Asistencias ({'Hoy' if modo_asis == 'Hoy' else fecha_obj.strftime('%d/%m/%Y')})"
+
             col1, col2, col3 = st.columns(3)
             col1.metric("Catequizandos Registrados", kpis["total_catequizandos"])
-            col2.metric("Asistencias Registradas", kpis["total_asistencias_registradas"])
+            col2.metric(etiqueta_asis, total_asis_mostrar)
             col3.metric("Total Recaudado (S/)", f"S/ {kpis['total_recaudado']:.2f}")
 
             st.divider()
@@ -663,13 +691,19 @@ if pagina == "📊 Resumen General":
                 with tab_a1:
                     if deudores:
                         df_deu = pd.DataFrame(deudores)
-                        col_f1, col_f2 = st.columns(2)
+                        col_f1, col_f2, col_f3, col_f4 = st.columns(4)
                         conceptos_unicos = ["Todos"] + sorted(df_deu["Concepto"].unique().tolist())
-                        filtro_conc = col_f1.selectbox("Filtrar por concepto:", conceptos_unicos, key="alerta_conc")
-                        busq_deu = col_f2.text_input("🔍 Buscar por DNI o nombre:", key="alerta_busq_deu")
+                        filtro_conc = col_f1.selectbox("Concepto:", conceptos_unicos, key="alerta_conc")
+                        filtro_col_deu = col_f2.selectbox("Colegio:", ["Todos"] + COLEGIOS_PARROQUIA, key="alerta_col_deu")
+                        filtro_grp_deu = col_f3.selectbox("Grupo:", ["Todos"] + GRUPOS_OPCIONES, key="alerta_grp_deu")
+                        busq_deu = col_f4.text_input("🔍 DNI o nombre:", key="alerta_busq_deu")
 
                         if filtro_conc != "Todos":
                             df_deu = df_deu[df_deu["Concepto"] == filtro_conc]
+                        if filtro_col_deu != "Todos" and "Colegio" in df_deu.columns:
+                            df_deu = df_deu[df_deu["Colegio"] == filtro_col_deu]
+                        if filtro_grp_deu != "Todos" and "Grupo" in df_deu.columns:
+                            df_deu = df_deu[df_deu["Grupo"] == filtro_grp_deu]
                         if busq_deu:
                             df_deu = df_deu[
                                 df_deu.apply(lambda r: busq_deu.lower() in r.astype(str).str.lower().to_string(),
@@ -684,18 +718,24 @@ if pagina == "📊 Resumen General":
                 with tab_a2:
                     if docs_pend:
                         df_docs = pd.DataFrame(docs_pend)
-                        col_d1, col_d2, col_d3 = st.columns(3)
+                        col_d1, col_d2, col_d3, col_d4, col_d5 = st.columns(5)
                         docs_unicos = ["Todos"] + sorted(df_docs["Documento"].unique().tolist())
                         estados_unicos = ["Todos"] + sorted(df_docs["Estado"].unique().tolist())
 
-                        filtro_doc = col_d1.selectbox("Filtrar por documento:", docs_unicos, key="alerta_doc")
-                        filtro_est = col_d2.selectbox("Filtrar por estado:", estados_unicos, key="alerta_est")
-                        busq_doc = col_d3.text_input("🔍 Buscar por DNI o nombre:", key="alerta_busq_doc")
+                        filtro_doc = col_d1.selectbox("Documento:", docs_unicos, key="alerta_doc")
+                        filtro_est = col_d2.selectbox("Estado:", estados_unicos, key="alerta_est")
+                        filtro_col_doc = col_d3.selectbox("Colegio:", ["Todos"] + COLEGIOS_PARROQUIA, key="alerta_col_doc")
+                        filtro_grp_doc = col_d4.selectbox("Grupo:", ["Todos"] + GRUPOS_OPCIONES, key="alerta_grp_doc")
+                        busq_doc = col_d5.text_input("🔍 DNI o nombre:", key="alerta_busq_doc")
 
                         if filtro_doc != "Todos":
                             df_docs = df_docs[df_docs["Documento"] == filtro_doc]
                         if filtro_est != "Todos":
                             df_docs = df_docs[df_docs["Estado"] == filtro_est]
+                        if filtro_col_doc != "Todos" and "Colegio" in df_docs.columns:
+                            df_docs = df_docs[df_docs["Colegio"] == filtro_col_doc]
+                        if filtro_grp_doc != "Todos" and "Grupo" in df_docs.columns:
+                            df_docs = df_docs[df_docs["Grupo"] == filtro_grp_doc]
                         if busq_doc:
                             df_docs = df_docs[
                                 df_docs.apply(lambda r: busq_doc.lower() in r.astype(str).str.lower().to_string(),
@@ -709,12 +749,18 @@ if pagina == "📊 Resumen General":
                 with tab_a3:
                     if asis_res:
                         df_asis = pd.DataFrame(asis_res)
-                        col_s1, col_s2, col_s3 = st.columns(3)
-                        min_cat = col_s1.number_input("Alertar si Catequesis es menor a:", min_value=0, value=1, step=1)
-                        min_misa = col_s2.number_input("Alertar si Misas es menor a:", min_value=0, value=1, step=1)
-                        busq_as = col_s3.text_input("🔍 Buscar por DNI o nombre:", key="alerta_busq_asis")
+                        col_s1, col_s2, col_s3, col_s4, col_s5 = st.columns(5)
+                        min_cat = col_s1.number_input("Catequesis menor a:", min_value=0, value=1, step=1)
+                        min_misa = col_s2.number_input("Misas menor a:", min_value=0, value=1, step=1)
+                        filtro_col_as = col_s3.selectbox("Colegio:", ["Todos"] + COLEGIOS_PARROQUIA, key="alerta_col_asis")
+                        filtro_grp_as = col_s4.selectbox("Grupo:", ["Todos"] + GRUPOS_OPCIONES, key="alerta_grp_asis")
+                        busq_as = col_s5.text_input("🔍 DNI o nombre:", key="alerta_busq_asis")
 
                         df_riesgo = df_asis[(df_asis["Catequesis"] < min_cat) | (df_asis["Misas"] < min_misa)]
+                        if filtro_col_as != "Todos" and "Colegio" in df_riesgo.columns:
+                            df_riesgo = df_riesgo[df_riesgo["Colegio"] == filtro_col_as]
+                        if filtro_grp_as != "Todos" and "Grupo" in df_riesgo.columns:
+                            df_riesgo = df_riesgo[df_riesgo["Grupo"] == filtro_grp_as]
                         if busq_as:
                             df_riesgo = df_riesgo[
                                 df_riesgo.apply(lambda r: busq_as.lower() in r.astype(str).str.lower().to_string(),
@@ -1262,39 +1308,54 @@ elif pagina == "💰 Tesorería":
 
         with st.expander("➕ Registrar Nuevo Pago / Aporte", expanded=True):
             if lista_jovenes and lista_conceptos:
+                opciones_j = {
+                    f"{j['DNI']} - {j['Nombres']} {j['Apellidos']} ({j.get('Colegio', 'Sin asignar')})": j["DNI"]
+                    for j in lista_jovenes
+                }
+                dni_pago_sel = selector_con_buscador(
+                    "Catequizando",
+                    opciones_j,
+                    "pago_cat",
+                    placeholder="Escribe el DNI o nombre del catequizando..."
+                )
+
                 with st.form("form_pago", clear_on_submit=True):
-                    opciones_j = {f"{j['Nombres']} {j['Apellidos']} (DNI: {j['DNI']})": j["DNI"] for j in lista_jovenes}
                     opciones_c = {
-                        f"{c['nombre_conc']} (S/ {c['monto_base']})": c["id_concepto"]
+                        f"{c['nombre_conc']} — Monto fijo: S/ {float(c['monto_base']):.2f}": c
                         for c in lista_conceptos
                     }
-
-                    c_top1, c_top2 = st.columns(2)
-                    alumno_sel = c_top1.selectbox("Catequizando", list(opciones_j.keys()))
-                    concepto_sel = c_top2.selectbox("Concepto de Pago", list(opciones_c.keys()))
-
-                    c1, c2 = st.columns(2)
-                    monto = c1.number_input("Monto Pagado (S/)", min_value=1.0, step=1.0)
-                    metodo = c2.selectbox("Método de Pago", ["Efectivo", "Yape", "Transferencia"])
-                    btn_pago = st.form_submit_button("Registrar Pago")
+                    c1, c2, c3 = st.columns(3)
+                    concepto_key = c1.selectbox("Concepto de Pago", list(opciones_c.keys()))
+                    codigo_boleta = c2.text_input("Código de Boleta Física *", placeholder="Ej: B001-00452")
+                    metodo = c3.selectbox("Método de Pago", ["Efectivo", "Yape", "Transferencia"])
+                    btn_pago = st.form_submit_button("Registrar Pago", type="primary")
 
                     if btn_pago:
-                        resp_p = requests.post(
-                            f"{API_URL}/api/v1/tesoreria/pagos",
-                            json={
-                                "dni_catequizando": opciones_j[alumno_sel],
-                                "id_concepto": opciones_c[concepto_sel],
-                                "monto": monto,
-                                "metodo_pago": metodo,
-                                "id_usuario": st.session_state.get("admin_id", 1)
-                            },
-                            timeout=15
-                        )
-                        if resp_p.status_code in [200, 201]:
-                            st.success("Pago registrado correctamente.")
-                            st.rerun()
+                        if not dni_pago_sel:
+                            st.warning("Selecciona un catequizando.")
+                        elif not codigo_boleta.strip():
+                            st.warning("Ingresa el código de la boleta física.")
                         else:
-                            st.error(f"Error al registrar pago ({resp_p.status_code}): {resp_p.text}")
+                            conc_obj = opciones_c[concepto_key]
+                            resp_p = requests.post(
+                                f"{API_URL}/api/v1/tesoreria/pagos",
+                                json={
+                                    "dni_catequizando": dni_pago_sel,
+                                    "id_concepto": conc_obj["id_concepto"],
+                                    "monto": float(conc_obj["monto_base"]),
+                                    "codigo_boleta": codigo_boleta.strip(),
+                                    "metodo_pago": metodo,
+                                    "id_usuario": st.session_state.get("admin_id", 1)
+                                },
+                                timeout=15
+                            )
+                            if resp_p.status_code in [200, 201]:
+                                st.success(
+                                    f"Pago registrado (S/ {float(conc_obj['monto_base']):.2f} | Boleta: {codigo_boleta.strip()})."
+                                )
+                                st.rerun()
+                            else:
+                                st.error(f"Error al registrar pago ({resp_p.status_code}): {resp_p.text}")
             else:
                 st.warning("Necesitas tener al menos un catequizando y un concepto de pago en el catálogo.")
 
@@ -1304,26 +1365,40 @@ elif pagina == "💰 Tesorería":
             data_pagos = resp_pagos.json()
             lista_pagos = data_pagos.get("pagos", [])
             if lista_pagos:
-                st.metric("Total Recaudado", f"S/ {data_pagos.get('total_recaudado', 0):.2f}")
                 df_pagos = pd.DataFrame(lista_pagos)
 
-                busq_pagos = st.text_input("🔍 Buscar pago por DNI, alumno, concepto o método:", key="busq_tabla_pagos")
-                if busq_pagos:
-                    df_pagos = df_pagos[df_pagos.apply(lambda row: busq_pagos.lower() in row.astype(str).str.lower().to_string(), axis=1)]
+                p1, p2, p3, p4 = st.columns(4)
+                conc_pagos = ["Todos"] + sorted(df_pagos["concepto"].unique().tolist())
+                f_conc_p = p1.selectbox("Filtrar por Concepto:", conc_pagos, key="hist_p_conc")
+                f_col_p = p2.selectbox("Filtrar por Colegio:", ["Todos"] + COLEGIOS_PARROQUIA, key="hist_p_col")
+                f_grp_p = p3.selectbox("Filtrar por Grupo:", ["Todos"] + GRUPOS_OPCIONES, key="hist_p_grp")
+                busq_pagos = p4.text_input("🔍 DNI, alumno o boleta:", key="busq_tabla_pagos")
 
+                if f_conc_p != "Todos":
+                    df_pagos = df_pagos[df_pagos["concepto"] == f_conc_p]
+                if f_col_p != "Todos" and "colegio" in df_pagos.columns:
+                    df_pagos = df_pagos[df_pagos["colegio"] == f_col_p]
+                if f_grp_p != "Todos" and "grupo" in df_pagos.columns:
+                    df_pagos = df_pagos[df_pagos["grupo"] == f_grp_p]
+                if busq_pagos:
+                    df_pagos = df_pagos[
+                        df_pagos.apply(lambda row: busq_pagos.lower() in row.astype(str).str.lower().to_string(), axis=1)
+                    ]
+
+                st.metric("Total Recaudado (filtrado)", f"S/ {df_pagos['monto'].sum():.2f}")
                 st.dataframe(df_pagos, use_container_width=True, hide_index=True)
                 mostrar_botones_exportacion(df_pagos, "reporte_pagos", "Reporte de Tesoreria - Pagos")
 
                 with st.expander("🗑️ Anular / Eliminar un Pago"):
                     opciones_pagos = {
-                        f"ID {p['id_pago']} - {p['alumno']} (DNI: {p['dni']}) | {p['concepto']} (S/ {p['monto']})": p["id_pago"]
+                        f"ID {p['id_pago']} - {p['alumno']} (DNI: {p['dni']}) | {p['concepto']} | Boleta: {p.get('codigo_boleta', '-')} (S/ {p['monto']})": p["id_pago"]
                         for p in lista_pagos
                     }
                     id_pago_sel = selector_con_buscador(
                         "Pago a anular",
                         opciones_pagos,
                         "del_pago",
-                        placeholder="Buscar por DNI, alumno, concepto o ID..."
+                        placeholder="Buscar por DNI, alumno, concepto, boleta o ID..."
                     )
                     if id_pago_sel and st.button("Anular Pago Seleccionado", key="btn_del_pago"):
                         r_del = requests.delete(
